@@ -22,7 +22,6 @@ import { useProjectSelector } from "@/hooks/use-project-selector";
 import { getRandomThinkingMessage } from "@/lib/ai/messages";
 import type { AgentMode } from "@/lib/ai/models";
 import { cn, generateUUID } from "@/lib/utils";
-import { AgentModeSelector } from "./agent-mode-selector";
 import { Response } from "./elements/response";
 import { EmailCard, looksLikeEmail } from "./email-card";
 import { SparklesIcon } from "./icons";
@@ -405,12 +404,6 @@ export function InlineQASheet({
                 <Send className="h-4 w-4" />
               )}
             </Button>
-          </div>
-          <div className="mt-2 flex items-center">
-            <AgentModeSelector
-              onAgentModeChange={setSelectedAgentMode}
-              selectedAgentMode={selectedAgentMode}
-            />
           </div>
         </div>
       </SheetContent>

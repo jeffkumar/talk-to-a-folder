@@ -54,7 +54,6 @@ import type { AgentMode } from "@/lib/ai/models";
 import { chatModels } from "@/lib/ai/models";
 import type { Attachment, ChatMessage, VisibilityType } from "@/lib/types";
 import { cn, fetcher } from "@/lib/utils";
-import { AgentModeSelector } from "./agent-mode-selector";
 import { DocumentTypePicker } from "./document-type-picker";
 import {
   PromptInput,
@@ -593,12 +592,6 @@ function PureMultimodalInput({
               selectedModelId={selectedModelId}
               status={status}
             />
-            {selectedAgentMode && onAgentModeChange && (
-              <AgentModeSelector
-                onAgentModeChange={onAgentModeChange}
-                selectedAgentMode={selectedAgentMode}
-              />
-            )}
           </PromptInputTools>
 
           {status === "submitted" ? (
