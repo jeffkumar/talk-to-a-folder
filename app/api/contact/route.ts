@@ -4,14 +4,14 @@ import { ChatSDKError } from "@/lib/errors";
 const MAX_NAME = 200;
 const MAX_EMAIL = 320;
 const MAX_MESSAGE = 5000;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const email = typeof body.email === "string" ? body.email.trim() : "";
-    const message =
-      typeof body.message === "string" ? body.message.trim() : "";
+    const message = typeof body.message === "string" ? body.message.trim() : "";
 
     if (!name || name.length > MAX_NAME) {
       return new ChatSDKError(
@@ -20,8 +20,7 @@ export async function POST(request: Request) {
       ).toResponse();
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email) || email.length > MAX_EMAIL) {
+    if (!EMAIL_REGEX.test(email) || email.length > MAX_EMAIL) {
       return new ChatSDKError(
         "bad_request:contact",
         "Valid email is required."
