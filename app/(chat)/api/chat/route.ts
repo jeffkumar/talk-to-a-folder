@@ -1462,7 +1462,7 @@ export async function POST(request: Request) {
           if (shouldLogRetrieval) {
             console.log("Turbopuffer retrieval succeeded", {
               queryLength: userText.length,
-              requestedSourceTypes,
+              requestedSourceTypes: effectiveSourceTypes,
               namespaces,
               perNamespace: byNamespaceCounts,
               fusedRowsCount: fusedRows.length,
