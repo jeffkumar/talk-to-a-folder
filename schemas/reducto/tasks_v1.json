@@ -1,0 +1,53 @@
+{
+  "name": "tasks_v1",
+  "description": "Schema for extracting actionable tasks from documents like meeting transcripts, notes, emails, and other content.",
+  "output": {
+    "type": "object",
+    "properties": {
+      "tasks": {
+        "type": "array",
+        "description": "List of actionable tasks extracted from the content",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "A clear, actionable task title that starts with a verb when possible"
+            },
+            "description": {
+              "type": "string",
+              "description": "Detailed description of what needs to be done"
+            },
+            "priority": {
+              "type": "string",
+              "enum": ["urgent", "high", "medium", "low"],
+              "description": "Task priority level based on urgency and importance mentioned in the content"
+            },
+            "assignee": {
+              "type": "string",
+              "description": "Name of the person assigned to this task, if mentioned"
+            },
+            "due_date": {
+              "type": "string",
+              "description": "Due date or deadline in YYYY-MM-DD format, if mentioned"
+            },
+            "start_date": {
+              "type": "string",
+              "description": "Suggested start date in YYYY-MM-DD format, if applicable"
+            },
+            "context": {
+              "type": "string",
+              "description": "Original quote or context from the source document where this task was identified"
+            }
+          },
+          "required": ["title", "priority"]
+        }
+      },
+      "summary": {
+        "type": "string",
+        "description": "Brief summary of the document and the types of tasks identified"
+      }
+    },
+    "required": ["tasks"]
+  }
+}

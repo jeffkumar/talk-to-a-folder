@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+
+# Get the remote name and URL from the push command
+remote="$1"
+url="$2"
+
+# Read the refs being pushed
+while read local_ref local_sha remote_ref remote_sha
+do
+  # Check if pushing to main branch
+  if echo "$remote_ref" | grep -q "refs/heads/main"; then
+    echo "🔍 Pushing to main - running pre-push checks..."
+    echo ""
+    
+    # Run build check (matches what Vercel runs)
+    echo "🏗️  Running build check..."
+    if ! pnpm build:check; then
+      echo ""
+      echo "❌ Build failed! Fix the build errors before pushing to main."
+      exit 1
+    fi
+    echo "✅ Build passed"
+    echo ""
+    
+    echo "🎉 All pre-push checks passed! Proceeding with push to main..."
+  fi
+done

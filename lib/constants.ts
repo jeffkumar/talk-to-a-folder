@@ -1,0 +1,28 @@
+import { generateDummyPassword } from "./db/utils";
+
+export const isProductionEnvironment = process.env.NODE_ENV === "production";
+export const isDevelopmentEnvironment = process.env.NODE_ENV === "development";
+export const isTestEnvironment = Boolean(
+  process.env.PLAYWRIGHT_TEST_BASE_URL ||
+    process.env.PLAYWRIGHT ||
+    process.env.CI_PLAYWRIGHT
+);
+
+export const guestRegex = /^guest-\d+$/;
+
+export const DUMMY_PASSWORD = generateDummyPassword();
+
+/**
+ * Feature flag: prevent uploading a file to the same project if a file with the same
+ * filename already exists. Default: enabled.
+ *
+ * Set `PREVENT_DUPLICATE_PROJECT_DOC_FILENAMES=false` to disable.
+ */
+export const preventDuplicateProjectDocFilenames =
+  process.env.PREVENT_DUPLICATE_PROJECT_DOC_FILENAMES !== "false";
+
+/**
+ * Maximum number of users in the pilot program.
+ * Users beyond this limit are placed on a waitlist.
+ */
+export const PILOT_USER_LIMIT = 50;

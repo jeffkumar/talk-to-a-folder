@@ -1,0 +1,37 @@
+{
+  "name": "cc_statement_v1",
+  "description": "Extract credit-card statement transactions. Output transactions[] with a posting date, human-readable description, a normalized merchant, amount, currency, and an optional normalized category. Amount should be a signed number (charges positive spend, refunds/payments negative) if possible; if the source uses the opposite convention, keep it consistent within the statement.",
+  "output": {
+    "type": "object",
+    "properties": {
+      "transactions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": "string",
+              "description": "Posting date in YYYY-MM-DD if available; otherwise best-effort date string."
+            },
+            "description": {
+              "type": "string",
+              "description": "Original transaction description as it appears on the statement."
+            },
+            "merchant": {
+              "type": "string",
+              "description": "Normalized merchant name (e.g., 'Starbucks', 'Amazon', 'United Airlines'). If unsure, derive a merchant-like name from the description (remove IDs, locations, and dates)."
+            },
+            "amount": { "type": ["number", "string"] },
+            "currency": { "type": "string" },
+            "category": {
+              "type": "string",
+              "description": "Optional normalized category. Prefer one of: coffee, dining, groceries, gas, travel, subscriptions, payment, refund, other."
+            }
+          },
+          "required": ["date", "description", "amount", "merchant"]
+        }
+      }
+    },
+    "required": ["transactions"]
+  }
+}

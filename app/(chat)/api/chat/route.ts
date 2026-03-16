@@ -1,0 +1,2697 @@
+import { geolocation } from "@vercel/functions";
+import {
+  convertToModelMessages,
+  createUIMessageStream,
+  generateText,
+  JsonToSseTransformStream,
+  smoothStream,
+  stepCountIs,
+  streamText,
+  tool,
+} from "ai";
+import { unstable_cache as cache } from "next/cache";
+import { after } from "next/server";
+import {
+  createResumableStreamContext,
+  type ResumableStreamContext,
+} from "resumable-stream";
+import type { ModelCatalog } from "tokenlens/core";
+import { fetchModels } from "tokenlens/fetch";
+import { getUsage } from "tokenlens/helpers";
+import { z } from "zod";
+import { auth, type UserType } from "@/app/(auth)/auth";
+import { runFinanceAgent } from "@/lib/ai/agents/finance-agent";
+import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import type { ChatModel } from "@/lib/ai/models";
+import {
+  emailFormattingPrompt,
+  getEmailAgentSystemPrompt,
+  type RequestHints,
+  systemPrompt,
+} from "@/lib/ai/prompts";
+import { myProvider } from "@/lib/ai/providers";
+import { financeQuery } from "@/lib/ai/tools/finance-query";
+import { isProductionEnvironment } from "@/lib/constants";
+import {
+  createStreamId,
+  deleteChatById,
+  getChatById,
+  getMessageCountByUserId,
+  getMessagesByChatId,
+  getOrCreateDefaultProjectForUser,
+  getProjectByIdForUser,
+  getProjectDocById,
+  getProjectDocsByGoogleParentId,
+  getProjectEntitySummaryForUser,
+  getTotalMessageCountByUserId,
+  insertUsageLog,
+  isPilotUser,
+  saveChat,
+  saveDocument,
+  saveMessages,
+  updateChatLastContextById,
+} from "@/lib/db/queries";
+import { extractDriveFolderIds } from "@/lib/integrations/google/parse-drive-url";
+import type { DBMessage } from "@/lib/db/schema";
+import { useOpenAIInference } from "@/lib/env";
+import { ChatSDKError } from "@/lib/errors";
+import {
+  inferSourceTypeFromNamespace,
+  namespacesForSourceTypes,
+  type SourceType,
+} from "@/lib/rag/source-routing";
+import {
+  formatRetrievedContext,
+  queryTurbopuffer,
+} from "@/lib/rag/turbopuffer";
+import type { ChatMessage, VisibilityType } from "@/lib/types";
+import type { AppUsage } from "@/lib/usage";
+import { convertToUIMessages, generateUUID } from "@/lib/utils";
+import { generateTitleFromUserMessage } from "../../actions";
+import { type PostRequestBody, postRequestBodySchema } from "./schema";
+
+export const maxDuration = 60;
+
+let globalStreamContext: ResumableStreamContext | null = null;
+
+type RetrievalRangePreset = "all" | "1d" | "7d" | "30d" | "90d";
+
+type RelativeDay = "today" | "yesterday" | "dayBeforeYesterday";
+
+const TIME_RANGE_HINT_RE =
+  /\b(last|past|yesterday|today|since|between|from|in the last|\d+\s*(day|week|month|year)s?|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2}\/\d{1,2}|\d{4}-\d{2}-\d{2})\b/i;
+
+// Heuristic: aggregation questions need more coverage across many docs (e.g. "sum across 30 invoices").
+const AGGREGATION_HINT_RE =
+  /\b(sum|total|add\s+up|aggregate|roll\s*up|grand\s+total)\b|\b(invoices?|receipts?)\b|\b(by|per|each)\s+month\b|\bmonthly\b|\bacross\s+\d+\b|\b(income|deposits?|revenue|bring\s+in|made|paid)\b/i;
+
+// "Finance data query" intent (DB-backed): totals/lists/breakdowns for a time window.
+// Avoid triggering on general financial planning (budgeting, goals, etc).
+const FINANCE_DATA_QUERY_RE =
+  /\b(how\s+much|total|sum|add\s+up|aggregate|breakdown|group|list|show|transactions?|charges?|spent|spend|by\s+(month|merchant|category)|top\s+\d+)\b/i;
+
+const INCOME_DATA_QUERY_RE =
+  /\b(how\s+much\s+did\s+i\s+make|how\s+much\s+did\s+we\s+make|how\s+much\s+did\s+we\s+bring\s+in|total\s+income|income\s+for|revenue\s+for|deposits?\s+for)\b/i;
+
+const INVOICE_REVENUE_RE = /\binvoice\s+revenue\b/i;
+
+// Finance follow-ups often omit the original time/category/entity and refer to "those".
+const FINANCE_FOLLOWUP_RE =
+  /\b(those|them|that|same)\b.*\b(merchants?|transactions?|charges?)\b|\b(merchants?|transactions?)\b/i;
+
+function startMsForPreset(
+  preset: RetrievalRangePreset | undefined,
+  nowMs: number
+) {
+  if (!preset || preset === "all") {
+    return null;
+  }
+  const dayMs = 24 * 60 * 60 * 1000;
+  if (preset === "1d") return nowMs - 1 * dayMs;
+  if (preset === "7d") return nowMs - 7 * dayMs;
+  if (preset === "30d") return nowMs - 30 * dayMs;
+  if (preset === "90d") return nowMs - 90 * dayMs;
+  return null;
+}
+
+type WeekdayToken = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+
+type WeekdayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun ... 6=Sat
+
+type TimeWindowKind =
+  | "none"
+  | "preset"
+  | "relativeDay"
+  | "absoluteDate"
+  | "lastWeekday"
+  | "lastWeekSegment";
+
+type TimeWindowIntent =
+  | { kind: "none"; matchedText?: string }
+  | { kind: "preset"; preset: RetrievalRangePreset; matchedText?: string }
+  | { kind: "relativeDay"; relativeDay: RelativeDay; matchedText?: string }
+  | {
+      kind: "absoluteDate";
+      month: number;
+      day: number;
+      year?: number;
+      matchedText?: string;
+    }
+  | { kind: "lastWeekday"; weekday: WeekdayToken; matchedText?: string }
+  | {
+      kind: "lastWeekSegment";
+      segment: "wed-sun" | "thu-sat";
+      matchedText?: string;
+    };
+
+function escapeRegExp(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripMatchedText(fullText: string, matchedText: string | undefined) {
+  const needle = typeof matchedText === "string" ? matchedText.trim() : "";
+  if (!needle) return fullText;
+  const re = new RegExp(escapeRegExp(needle), "gi");
+  return fullText.replace(re, " ").replace(/\s+/g, " ").trim();
+}
+
+function messageContentToText(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  // AI SDK / OpenAI provider can represent multimodal content as an array of parts.
+  // Baseten chat completions currently only support plain text content.
+  if (Array.isArray(content)) {
+    const textParts: string[] = [];
+    for (const part of content) {
+      if (!part || typeof part !== "object") continue;
+      const p = part as Record<string, unknown>;
+      if (p.type === "text" && typeof p.text === "string") {
+        textParts.push(p.text);
+      } else if (p.type === "input_text" && typeof p.text === "string") {
+        textParts.push(p.text);
+      }
+    }
+    return textParts.join("\n").trim();
+  }
+
+  return "";
+}
+
+function coerceMessagesToTextOnly(messages: unknown[]): unknown[] {
+  return messages
+    .map((m) => {
+      if (!m || typeof m !== "object") return null;
+      const msg = m as Record<string, unknown>;
+      const role = msg.role;
+      if (role !== "user" && role !== "assistant" && role !== "system") {
+        return null;
+      }
+      const content = messageContentToText(msg.content);
+      // Drop messages that become empty after stripping non-text parts.
+      if (!content) return null;
+      return { ...msg, content };
+    })
+    .filter((m) => m !== null);
+}
+
+function hasNonImageFileParts(messages: unknown[]): boolean {
+  for (const m of messages) {
+    if (!m || typeof m !== "object") continue;
+    const msg = m as Record<string, unknown>;
+    const content = msg.content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (!part || typeof part !== "object") continue;
+      const p = part as Record<string, unknown>;
+      if (p.type !== "file") continue;
+      const mediaType = p.mediaType;
+      if (typeof mediaType !== "string") return true;
+      if (!mediaType.startsWith("image/")) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+type RetrievalTimeFilterMode = "sourceCreatedAtMs" | "rowTimestamp";
+
+function parseCsvEnv(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function stripMarkdownTables(text: string): string {
+  // Remove GitHub-flavored markdown tables when we show an equivalent chart.
+  // Matches a header row, separator row, and subsequent table rows.
+  const tableBlockRe =
+    /^\|.*\|\s*\n^\|(?:\s*:?-{3,}:?\s*\|)+\s*\n(?:^\|.*\|\s*\n?)*/gms;
+  return text
+    .replace(tableBlockRe, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function isSlackContextAllowedForSessionEmail(
+  sessionEmail: string | null
+): boolean {
+  const allowlist = parseCsvEnv(process.env.SLACK_CONTEXT_ALLOWLIST_EMAILS).map(
+    (e) => e.toLowerCase()
+  );
+  if (allowlist.length === 0) return false;
+  if (!sessionEmail) return false;
+  const normalized = sessionEmail.trim().toLowerCase();
+  if (!normalized) return false;
+  return allowlist.includes(normalized);
+}
+
+function getRetrievalTimeFilterModeInfoForProject(
+  projectId: string | undefined
+): {
+  mode: RetrievalTimeFilterMode;
+  defaultMode: RetrievalTimeFilterMode;
+  projectAllowlisted: boolean;
+} {
+  // NOTE: We ultimately want all sources to populate `sourceCreatedAtMs` so Turbopuffer can
+  // do server-side filtering. Until then, allow per-project fallback to row timestamps (`ts`).
+  const defaultMode: RetrievalTimeFilterMode =
+    process.env.RETRIEVAL_TIME_FILTER_MODE === "rowTimestamp"
+      ? "rowTimestamp"
+      : "sourceCreatedAtMs";
+  const allowlist = parseCsvEnv(
+    process.env.RETRIEVAL_ROW_TIMESTAMP_PROJECT_IDS
+  );
+  const projectAllowlisted = Boolean(
+    projectId && allowlist.includes(projectId)
+  );
+  const mode: RetrievalTimeFilterMode = projectAllowlisted
+    ? "rowTimestamp"
+    : defaultMode;
+  return { mode, defaultMode, projectAllowlisted };
+}
+
+function getZonedParts(utcMs: number, timeZone: string) {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = dtf.formatToParts(new Date(utcMs));
+  const value = (type: string) =>
+    Number(parts.find((p) => p.type === type)?.value ?? "NaN");
+  return {
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: value("hour"),
+    minute: value("minute"),
+    second: value("second"),
+  };
+}
+
+function zonedDateTimeToUtcMs({
+  year,
+  month,
+  day,
+  hour,
+  minute,
+  second,
+  timeZone,
+}: {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+  timeZone: string;
+}) {
+  // Iteratively solve for the UTC instant that renders to the desired local time in `timeZone`.
+  let utcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  const desiredLocalMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  for (let i = 0; i < 3; i += 1) {
+    const actual = getZonedParts(utcMs, timeZone);
+    const actualLocalMs = Date.UTC(
+      actual.year,
+      actual.month - 1,
+      actual.day,
+      actual.hour,
+      actual.minute,
+      actual.second
+    );
+    const diff = desiredLocalMs - actualLocalMs;
+    utcMs += diff;
+    if (diff === 0) break;
+  }
+  return utcMs;
+}
+
+function startOfLocalDayUtcMs({
+  year,
+  month,
+  day,
+  timeZone,
+}: {
+  year: number;
+  month: number;
+  day: number;
+  timeZone: string;
+}) {
+  return zonedDateTimeToUtcMs({
+    year,
+    month,
+    day,
+    hour: 0,
+    minute: 0,
+    second: 0,
+    timeZone,
+  });
+}
+
+function addDaysToYmd(
+  { year, month, day }: { year: number; month: number; day: number },
+  days: number
+) {
+  const d = new Date(Date.UTC(year, month - 1, day));
+  d.setUTCDate(d.getUTCDate() + days);
+  return {
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth() + 1,
+    day: d.getUTCDate(),
+  };
+}
+
+function windowForRelativeDay({
+  nowMs,
+  timeZone,
+  which,
+}: {
+  nowMs: number;
+  timeZone: string;
+  which: RelativeDay;
+}): { startMs: number; endMs: number } {
+  const nowLocal = getZonedParts(nowMs, timeZone);
+  const offsetDays = which === "today" ? 0 : which === "yesterday" ? -1 : -2;
+  const target = addDaysToYmd(
+    { year: nowLocal.year, month: nowLocal.month, day: nowLocal.day },
+    offsetDays
+  );
+  const next = addDaysToYmd(target, 1);
+  const startMs = startOfLocalDayUtcMs({ ...target, timeZone });
+  const endMs = startOfLocalDayUtcMs({ ...next, timeZone });
+  return { startMs, endMs };
+}
+
+function getZonedWeekdayIndex(
+  utcMs: number,
+  timeZone: string
+): WeekdayIndex | null {
+  const dtf = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" });
+  const weekday =
+    dtf.formatToParts(new Date(utcMs)).find((p) => p.type === "weekday")
+      ?.value ?? "";
+  const key = weekday.toLowerCase().slice(0, 3);
+  if (key === "sun") return 0;
+  if (key === "mon") return 1;
+  if (key === "tue") return 2;
+  if (key === "wed") return 3;
+  if (key === "thu") return 4;
+  if (key === "fri") return 5;
+  if (key === "sat") return 6;
+  return null;
+}
+
+function weekdayTokenToIndex(token: WeekdayToken): WeekdayIndex {
+  if (token === "sun") return 0;
+  if (token === "mon") return 1;
+  if (token === "tue") return 2;
+  if (token === "wed") return 3;
+  if (token === "thu") return 4;
+  if (token === "fri") return 5;
+  return 6;
+}
+
+function windowForLastWeekday({
+  nowMs,
+  timeZone,
+  targetDow,
+}: {
+  nowMs: number;
+  timeZone: string;
+  targetDow: WeekdayIndex;
+}): { startMs: number; endMs: number } | null {
+  const nowLocal = getZonedParts(nowMs, timeZone);
+  const nowDow = getZonedWeekdayIndex(nowMs, timeZone);
+  if (nowDow === null) return null;
+
+  // "last Friday" means the previous Friday, not "today" if today is Friday.
+  let deltaDays = (nowDow - targetDow + 7) % 7;
+  if (deltaDays === 0) deltaDays = 7;
+
+  const target = addDaysToYmd(
+    { year: nowLocal.year, month: nowLocal.month, day: nowLocal.day },
+    -deltaDays
+  );
+  const next = addDaysToYmd(target, 1);
+  return {
+    startMs: startOfLocalDayUtcMs({ ...target, timeZone }),
+    endMs: startOfLocalDayUtcMs({ ...next, timeZone }),
+  };
+}
+
+function windowForLastWeekSegment({
+  nowMs,
+  timeZone,
+  startDow,
+  endDow,
+}: {
+  nowMs: number;
+  timeZone: string;
+  startDow: WeekdayIndex;
+  endDow: WeekdayIndex;
+}): { startMs: number; endMs: number } | null {
+  const nowLocal = getZonedParts(nowMs, timeZone);
+  const nowDow = getZonedWeekdayIndex(nowMs, timeZone);
+  if (nowDow === null) return null;
+
+  // Find the previous occurrence of the segment's "endDow"
+  let deltaToEnd = (nowDow - endDow + 7) % 7;
+  if (deltaToEnd === 0) deltaToEnd = 7;
+
+  const endDay = addDaysToYmd(
+    { year: nowLocal.year, month: nowLocal.month, day: nowLocal.day },
+    -deltaToEnd
+  );
+
+  const spanDays = ((endDow - startDow + 7) % 7) + 1; // inclusive span
+  const startDay = addDaysToYmd(endDay, -(spanDays - 1));
+  const endExclusive = addDaysToYmd(endDay, 1);
+
+  return {
+    startMs: startOfLocalDayUtcMs({ ...startDay, timeZone }),
+    endMs: startOfLocalDayUtcMs({ ...endExclusive, timeZone }),
+  };
+}
+
+function isValidYmd({
+  year,
+  month,
+  day,
+}: {
+  year: number;
+  month: number;
+  day: number;
+}): boolean {
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return (
+    d.getUTCFullYear() === year &&
+    d.getUTCMonth() + 1 === month &&
+    d.getUTCDate() === day
+  );
+}
+
+function inferYearForMonthDay({
+  nowMs,
+  timeZone,
+  month,
+  day,
+}: {
+  nowMs: number;
+  timeZone: string;
+  month: number;
+  day: number;
+}): number | null {
+  const nowLocal = getZonedParts(nowMs, timeZone);
+  const candidate = nowLocal.year;
+  if (!isValidYmd({ year: candidate, month, day })) {
+    return null;
+  }
+  const candidateStart = startOfLocalDayUtcMs({
+    year: candidate,
+    month,
+    day,
+    timeZone,
+  });
+  // If the requested date hasn't happened yet this year (in local time), pick last year.
+  if (candidateStart > nowMs) {
+    const prev = candidate - 1;
+    return isValidYmd({ year: prev, month, day }) ? prev : null;
+  }
+  return candidate;
+}
+
+function computeWindowFromIntent({
+  intent,
+  nowMs,
+  timeZone,
+}: {
+  intent: TimeWindowIntent;
+  nowMs: number;
+  timeZone: string;
+}): { startMs: number; endMs: number } | null {
+  if (intent.kind === "relativeDay") {
+    return windowForRelativeDay({ nowMs, timeZone, which: intent.relativeDay });
+  }
+  if (intent.kind === "lastWeekday") {
+    return windowForLastWeekday({
+      nowMs,
+      timeZone,
+      targetDow: weekdayTokenToIndex(intent.weekday),
+    });
+  }
+  if (intent.kind === "lastWeekSegment") {
+    if (intent.segment === "wed-sun") {
+      return windowForLastWeekSegment({
+        nowMs,
+        timeZone,
+        startDow: 3,
+        endDow: 0,
+      });
+    }
+    return windowForLastWeekSegment({
+      nowMs,
+      timeZone,
+      startDow: 4,
+      endDow: 6,
+    });
+  }
+  if (intent.kind === "absoluteDate") {
+    const year =
+      typeof intent.year === "number" && Number.isFinite(intent.year)
+        ? Math.floor(intent.year)
+        : inferYearForMonthDay({
+            nowMs,
+            timeZone,
+            month: intent.month,
+            day: intent.day,
+          });
+    if (year === null) return null;
+    if (!isValidYmd({ year, month: intent.month, day: intent.day }))
+      return null;
+    const startMs = startOfLocalDayUtcMs({
+      year,
+      month: intent.month,
+      day: intent.day,
+      timeZone,
+    });
+    const next = addDaysToYmd(
+      { year, month: intent.month, day: intent.day },
+      1
+    );
+    const endMs = startOfLocalDayUtcMs({ ...next, timeZone });
+    return { startMs, endMs };
+  }
+  return null;
+}
+
+function validateTimeWindowIntent(intent: TimeWindowIntent): boolean {
+  if (intent.kind === "none") return true;
+  if (intent.kind === "preset") return true;
+  if (intent.kind === "relativeDay") return true;
+  if (intent.kind === "absoluteDate") return true;
+  if (intent.kind === "lastWeekday") return true;
+  if (intent.kind === "lastWeekSegment") return true;
+  return false;
+}
+
+async function inferTimeWindowIntent({
+  userText,
+  requestedPreset,
+}: {
+  userText: string;
+  requestedPreset: RetrievalRangePreset | undefined;
+}): Promise<TimeWindowIntent> {
+  let selected: TimeWindowIntent = { kind: "none" };
+
+  const schema = z.object({
+    kind: z.enum([
+      "none",
+      "preset",
+      "relativeDay",
+      "absoluteDate",
+      "lastWeekday",
+      "lastWeekSegment",
+    ]),
+    preset: z.enum(["all", "1d", "7d", "30d", "90d"]).optional(),
+    relativeDay: z
+      .enum(["today", "yesterday", "dayBeforeYesterday"])
+      .optional(),
+    month: z.number().int().min(1).max(12).optional(),
+    day: z.number().int().min(1).max(31).optional(),
+    year: z.number().int().min(1970).max(2100).optional(),
+    weekday: z
+      .enum(["sun", "mon", "tue", "wed", "thu", "fri", "sat"])
+      .optional(),
+    segment: z.enum(["wed-sun", "thu-sat"]).optional(),
+    matchedText: z.string().max(120).optional(),
+  });
+
+  await generateText({
+    model: myProvider.languageModel("chat-model"),
+    system:
+      "Extract a time window intent for retrieval.\n" +
+      "- If no time constraint is implied, choose kind='none'.\n" +
+      "- If the user asks for a specific day window, choose kind='relativeDay' or kind='lastWeekday'.\n" +
+      "- If the user asks for an absolute date like 'Dec 2nd', '12/2', or '2025-12-02', choose kind='absoluteDate' with month/day and optional year.\n" +
+      "- If the user asks for 'end of last week' and implies a segment (e.g. Wed-Sun or Thu-Sat), choose kind='lastWeekSegment'.\n" +
+      "- If the user asks for a broad range like 'last week' or 'past 30 days', choose kind='preset' with the closest broader preset.\n" +
+      "- Provide matchedText as the smallest phrase to remove from the embedding query (optional).\n" +
+      `- The UI requestedPreset is: ${requestedPreset ?? "none"}.\n` +
+      "You MUST call the provided tool and nothing else.",
+    messages: [{ role: "user", content: userText }],
+    tools: {
+      selectTimeWindow: tool({
+        description: "Select a structured time window intent for retrieval.",
+        inputSchema: schema,
+        execute: async (input) => {
+          const parsed = schema.safeParse(input);
+          if (!parsed.success) {
+            selected = { kind: "none" };
+            return { kind: "none" as const };
+          }
+
+          const v = parsed.data;
+          if (v.kind === "preset") {
+            selected = {
+              kind: "preset",
+              preset: v.preset ?? "all",
+              matchedText: v.matchedText,
+            };
+          } else if (v.kind === "relativeDay" && v.relativeDay) {
+            selected = {
+              kind: "relativeDay",
+              relativeDay: v.relativeDay,
+              matchedText: v.matchedText,
+            };
+          } else if (v.kind === "absoluteDate" && v.month && v.day) {
+            selected = {
+              kind: "absoluteDate",
+              month: v.month,
+              day: v.day,
+              year: v.year,
+              matchedText: v.matchedText,
+            };
+          } else if (v.kind === "lastWeekday" && v.weekday) {
+            selected = {
+              kind: "lastWeekday",
+              weekday: v.weekday,
+              matchedText: v.matchedText,
+            };
+          } else if (v.kind === "lastWeekSegment" && v.segment) {
+            selected = {
+              kind: "lastWeekSegment",
+              segment: v.segment,
+              matchedText: v.matchedText,
+            };
+          } else {
+            selected = { kind: "none", matchedText: v.matchedText };
+          }
+
+          if (!validateTimeWindowIntent(selected)) {
+            selected = { kind: "none" };
+          }
+          return selected;
+        },
+      }),
+    },
+    toolChoice: { type: "tool", toolName: "selectTimeWindow" },
+    temperature: 0,
+    maxOutputTokens: 120,
+    stopWhen: stepCountIs(1),
+  });
+
+  return selected;
+}
+
+function timestampMsFromRow(row: unknown): number | null {
+  if (!row || typeof row !== "object") {
+    return null;
+  }
+  const r = row as Record<string, unknown>;
+  const sourceCreatedAtMs = r.sourceCreatedAtMs;
+  if (
+    typeof sourceCreatedAtMs === "number" &&
+    Number.isFinite(sourceCreatedAtMs)
+  ) {
+    return sourceCreatedAtMs;
+  }
+  if (typeof sourceCreatedAtMs === "string" && sourceCreatedAtMs.length > 0) {
+    const parsed = Number(sourceCreatedAtMs);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  const ts = r.ts;
+  if (typeof ts === "string" && ts.length > 0) {
+    const parsedSeconds = Number(ts);
+    if (Number.isFinite(parsedSeconds)) return Math.floor(parsedSeconds * 1000);
+  }
+  return null;
+}
+
+function extractLastMentionName(text: string): string | null {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const match =
+    normalized.match(
+      /\bwhat did\s+(.+?)\s+last\s+(mention|say|talk about)\b/i
+    ) ??
+    normalized.match(
+      /\bwhat was\s+the last thing\s+(.+?)\s+(mentioned|said)\b/i
+    );
+  const raw = match?.[1]?.trim();
+  if (!raw) return null;
+  // Strip trailing punctuation and common filler.
+  const cleaned = raw.replace(/[?.!,;:]+$/g, "").trim();
+  if (!cleaned) return null;
+  return cleaned;
+}
+
+function formatNewestSlackMatch({
+  name,
+  row,
+  tsMs,
+}: {
+  name: string;
+  row: Record<string, unknown>;
+  tsMs: number;
+}): string {
+  const userName = typeof row.user_name === "string" ? row.user_name : name;
+  const channelName =
+    typeof row.channel_name === "string" ? row.channel_name : "";
+  const url = typeof row.url === "string" ? row.url : "";
+  const content = typeof row.content === "string" ? row.content : "";
+  const iso = new Date(tsMs).toISOString();
+  const headerParts = [
+    "Most recent Slack message (in retrieved set)",
+    userName ? `author=${userName}` : "",
+    channelName ? `channel=#${channelName}` : "",
+    `at=${iso}`,
+    url ? `url=${url}` : "",
+  ].filter((p) => p.length > 0);
+  return `${headerParts.join(" · ")}\n${content}`;
+}
+
+const getTokenlensCatalog = cache(
+  async (): Promise<ModelCatalog | undefined> => {
+    try {
+      return await fetchModels();
+    } catch (err) {
+      console.warn(
+        "TokenLens: catalog fetch failed, using default catalog",
+        err
+      );
+      return; // tokenlens helpers will fall back to defaultCatalog
+    }
+  },
+  ["tokenlens-catalog"],
+  { revalidate: 24 * 60 * 60 } // 24 hours
+);
+
+export function getStreamContext() {
+  if (!globalStreamContext) {
+    try {
+      globalStreamContext = createResumableStreamContext({
+        waitUntil: after,
+      });
+    } catch (error: any) {
+      if (error.message.includes("REDIS_URL")) {
+        console.log(
+          " > Resumable streams are disabled due to missing REDIS_URL"
+        );
+      } else {
+        console.error(error);
+      }
+    }
+  }
+
+  return globalStreamContext;
+}
+
+export async function POST(request: Request) {
+  let requestBody: PostRequestBody;
+
+  try {
+    const json = await request.json();
+    requestBody = postRequestBodySchema.parse(json);
+  } catch (_) {
+    return new ChatSDKError("bad_request:api").toResponse();
+  }
+
+  try {
+    const {
+      id,
+      message,
+      selectedChatModel,
+      selectedVisibilityType,
+      selectedAgentMode,
+      projectId: providedProjectId,
+      sourceTypes,
+      ignoredDocIds,
+      targetDocIds,
+      retrievalRangePreset,
+      retrievalTimeZone,
+      selectedEntities,
+      selectedTimeRange,
+      inlineQAMode,
+    }: {
+      id: string;
+      message: ChatMessage;
+      selectedChatModel: ChatModel["id"];
+      selectedVisibilityType: VisibilityType;
+      selectedAgentMode?: string; // "project", "finance", or custom agent UUID
+      projectId?: string;
+      sourceTypes?: Array<"slack" | "docs">;
+      ignoredDocIds?: string[];
+      targetDocIds?: string[];
+      retrievalRangePreset?: RetrievalRangePreset;
+      retrievalTimeZone?: string;
+      selectedEntities?: Array<{
+        kind: "personal" | "business";
+        name: string | null;
+      }>;
+      selectedTimeRange?: {
+        type: "preset" | "custom";
+        label: string;
+        date_start?: string;
+        date_end?: string;
+      };
+      inlineQAMode?: boolean;
+    } = requestBody;
+
+    // Agent mode determines which tools are available
+    const isFinanceMode = selectedAgentMode === "finance";
+    const isEmailMode = selectedAgentMode === "email";
+    const isFilesMode = selectedAgentMode === "files";
+    const isInlineQAMode = inlineQAMode === true;
+    const isCustomAgent =
+      selectedAgentMode &&
+      selectedAgentMode !== "project" &&
+      selectedAgentMode !== "finance" &&
+      selectedAgentMode !== "email" &&
+      selectedAgentMode !== "files";
+
+    const session = await auth();
+
+    if (!session?.user) {
+      return new ChatSDKError("unauthorized:chat").toResponse();
+    }
+
+    const userType: UserType = session.user.type;
+    const slackContextAllowed = isSlackContextAllowedForSessionEmail(
+      typeof session.user.email === "string" ? session.user.email : null
+    );
+
+    // Get user's first name (from profile or extract from email)
+    const getUserFirstName = (): string => {
+      if (session.user.displayName) {
+        // Extract first name from full name (e.g., "Jeff Smith" -> "Jeff")
+        const firstName =
+          session.user.displayName.split(/\s+/).at(0) ??
+          session.user.displayName;
+        return firstName.trim();
+      }
+      // Extract name from email as fallback (e.g., "jeff.smith@example.com" -> "Jeff")
+      const email = session.user.email;
+      if (typeof email === "string") {
+        const localPart = email.split("@").at(0) ?? "";
+        const namePart = localPart.split(/[._-]/).at(0) ?? localPart;
+        return (
+          namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase()
+        );
+      }
+      return "there";
+    };
+    const userDisplayName = getUserFirstName();
+
+    // Check pilot user limits (200 total messages)
+    const isPilot = await isPilotUser(session.user.id);
+    if (isPilot) {
+      const totalMessages = await getTotalMessageCountByUserId({
+        id: session.user.id,
+      });
+      if (totalMessages >= 500) {
+        return new ChatSDKError(
+          "rate_limit:chat",
+          "You've run out of free messages. Email jeffkumar.aw@gmail.com to upgrade. Pro account: $120/seat/month."
+        ).toResponse();
+      }
+    }
+
+    // Check daily limits for regular users
+    const messageCount = await getMessageCountByUserId({
+      id: session.user.id,
+      differenceInHours: 24,
+    });
+
+    if (messageCount >= entitlementsByUserType[userType].maxMessagesPerDay) {
+      return new ChatSDKError("rate_limit:chat").toResponse();
+    }
+
+    const chat = await getChatById({ id });
+    let messagesFromDb: DBMessage[] = [];
+    let activeProjectId: string;
+    let isDefaultProject = false;
+
+    if (chat) {
+      if (chat.userId !== session.user.id) {
+        return new ChatSDKError("forbidden:chat").toResponse();
+      }
+      // Only fetch messages if chat already exists
+      messagesFromDb = await getMessagesByChatId({ id });
+
+      if (chat.projectId) {
+        activeProjectId = chat.projectId;
+        const project = await getProjectByIdForUser({
+          projectId: activeProjectId,
+          userId: session.user.id,
+        });
+        isDefaultProject = project?.isDefault ?? false;
+      } else {
+        // Fallback for chats without projectId (should be rare after backfill)
+        const defaultProject = await getOrCreateDefaultProjectForUser({
+          userId: session.user.id,
+        });
+        activeProjectId = defaultProject.id;
+        isDefaultProject = true;
+      }
+    } else {
+      const title = await generateTitleFromUserMessage({
+        message,
+      });
+
+      if (
+        typeof providedProjectId === "string" &&
+        providedProjectId.length > 0
+      ) {
+        const project = await getProjectByIdForUser({
+          projectId: providedProjectId,
+          userId: session.user.id,
+        });
+
+        if (!project) {
+          return new ChatSDKError("not_found:database").toResponse();
+        }
+        activeProjectId = project.id;
+        isDefaultProject = project.isDefault;
+      } else {
+        // A project must be selected to create a new chat
+        return new ChatSDKError(
+          "bad_request:api",
+          "A project must be selected to start a new chat"
+        ).toResponse();
+      }
+
+      await saveChat({
+        id,
+        userId: session.user.id,
+        projectId: activeProjectId,
+        title,
+        visibility: selectedVisibilityType,
+      });
+      // New chat - no need to fetch messages, it's empty
+    }
+
+    const uiMessages = [...convertToUIMessages(messagesFromDb), message];
+
+    // Fetch custom agent system prompt if applicable
+    let customAgentSystemPrompt: string | null = null;
+    let customAgentName: string | null = null;
+    if (isCustomAgent && selectedAgentMode) {
+      try {
+        const agentDoc = await getProjectDocById({ docId: selectedAgentMode });
+        if (
+          agentDoc &&
+          agentDoc.projectId === activeProjectId &&
+          agentDoc.documentType === "agent"
+        ) {
+          const response = await fetch(agentDoc.blobUrl);
+          if (response.ok) {
+            customAgentSystemPrompt = await response.text();
+            customAgentName =
+              agentDoc.description || agentDoc.filename.replace(/\.md$/, "");
+          }
+        }
+      } catch {
+        // Fallback to project mode if agent fetch fails
+      }
+    }
+
+    const { longitude, latitude, city, country } = geolocation(request);
+
+    const requestHints: RequestHints = {
+      longitude,
+      latitude,
+      city,
+      country,
+    };
+
+    // Build a best-effort query string from the user's text parts
+    const userTextParts = message.parts.filter(
+      (
+        part
+      ): part is Extract<(typeof message.parts)[number], { type: "text" }> =>
+        part.type === "text"
+    );
+    const userText = userTextParts
+      .map((part) => part.text)
+      .join("\n")
+      .slice(0, 4000);
+
+    // Resolve Google Drive folder links in the user message to targetDocIds
+    let effectiveTargetDocIds = targetDocIds;
+    let folderNotSynced = false;
+    if (activeProjectId && userText) {
+      const folderIds = extractDriveFolderIds(userText);
+      if (folderIds.length > 0) {
+        const resolvedDocIds: string[] = [
+          ...(effectiveTargetDocIds ?? []),
+        ];
+        let anyFound = false;
+        for (const folderId of folderIds) {
+          const docs = await getProjectDocsByGoogleParentId({
+            projectId: activeProjectId,
+            googleParentId: folderId,
+          });
+          if (docs.length > 0) {
+            anyFound = true;
+            for (const doc of docs) {
+              if (!resolvedDocIds.includes(doc.id)) {
+                resolvedDocIds.push(doc.id);
+              }
+            }
+          }
+        }
+        if (anyFound) {
+          effectiveTargetDocIds = resolvedDocIds;
+        } else {
+          folderNotSynced = true;
+        }
+      }
+    }
+
+    let retrievedContext = "";
+    let sources: any[] = [];
+
+    // When specific documents are targeted, fetch and include their full content
+    // This bypasses RAG limitations for structured data like transaction lists
+    // For notes (which don't have extractedJsonBlobUrl), fetch from blobUrl instead
+    let extractedJsonContext = "";
+    if (effectiveTargetDocIds && effectiveTargetDocIds.length > 0 && effectiveTargetDocIds.length <= 5) {
+      try {
+        const extractedParts: string[] = [];
+        for (const docId of effectiveTargetDocIds) {
+          const doc = await getProjectDocById({ docId });
+          if (!doc) continue;
+
+          const docName = doc.description || doc.filename || docId;
+          const labels =
+            (doc.metadata as { labels?: Array<{ name: string }> })?.labels ??
+            [];
+          const labelSuffix =
+            labels.length > 0
+              ? ` [labels: ${labels.map((l) => l.name).join(", ")}]`
+              : "";
+
+          if (doc.extractedJsonBlobUrl) {
+            // Fetch structured JSON data (e.g., parsed invoices, bank statements)
+            const resp = await fetch(doc.extractedJsonBlobUrl);
+            if (resp.ok) {
+              const jsonData = await resp.json();
+              extractedJsonContext += `\n\n## Extracted Data from "${docName}"${labelSuffix}\n\`\`\`json\n${JSON.stringify(jsonData, null, 2)}\n\`\`\`\n`;
+              extractedParts.push(docName);
+            }
+          } else if (doc.blobUrl) {
+            // Fallback: fetch raw content (for notes and docs without extracted JSON)
+            const resp = await fetch(doc.blobUrl);
+            if (resp.ok) {
+              const textContent = await resp.text();
+              extractedJsonContext += `\n\n## Content from "${docName}"${labelSuffix}\n${textContent}\n`;
+              extractedParts.push(docName);
+            }
+          }
+        }
+        if (extractedParts.length > 0) {
+          console.log(
+            "Chat: Including full content for targeted docs:",
+            extractedParts
+          );
+        }
+      } catch (err) {
+        console.warn("Failed to fetch content for targeted docs:", err);
+      }
+    }
+
+    // Finance questions should not depend on Turbopuffer retrieval.
+    const skipRetrievalForFinance =
+      AGGREGATION_HINT_RE.test(userText) ||
+      FINANCE_DATA_QUERY_RE.test(userText) ||
+      INCOME_DATA_QUERY_RE.test(userText);
+    const shouldLogRetrieval = process.env.DEBUG_TURBOPUFFER === "1";
+
+    if (userText && !skipRetrievalForFinance) {
+      try {
+        const inferDocLockFilenameHint = (text: string): string | null => {
+          // Explicit filename mention (prefer this).
+          const explicit = Array.from(
+            text.matchAll(
+              /(["'`])([^"'`\n]{1,160}\.(?:pdf|docx?|txt))\1|([^\s\n]{1,160}\.(?:pdf|docx?|txt))/gi
+            )
+          )
+            .map((m) => (m[2] || m[3] || "").trim())
+            .filter(Boolean);
+          if (explicit.length > 0) {
+            return explicit.at(-1)?.toLowerCase() ?? null;
+          }
+
+          // Heuristic: "just use the strategy doc" -> lock to docs with "strategy" in filename.
+          const normalized = text.toLowerCase();
+          const asksForOnly =
+            normalized.includes("just use") ||
+            normalized.includes("use only") ||
+            normalized.includes("only use");
+          if (
+            asksForOnly &&
+            normalized.includes("strategy") &&
+            normalized.includes("doc")
+          ) {
+            return "strategy";
+          }
+
+          return null;
+        };
+
+        const docLockFilenameHint = inferDocLockFilenameHint(userText);
+
+        const nowMs = Date.now();
+        const effectiveTimeZone =
+          typeof retrievalTimeZone === "string" && retrievalTimeZone.length > 0
+            ? retrievalTimeZone
+            : "UTC";
+
+        const requestedPreset = retrievalRangePreset;
+        const timeFilterModeInfo =
+          getRetrievalTimeFilterModeInfoForProject(activeProjectId);
+        const timeFilterMode = timeFilterModeInfo.mode;
+
+        const hasTimeHint = TIME_RANGE_HINT_RE.test(userText);
+        const intent = hasTimeHint
+          ? await inferTimeWindowIntent({
+              userText,
+              requestedPreset: requestedPreset ?? "all",
+            })
+          : ({ kind: "none" } satisfies TimeWindowIntent);
+
+        // Compute a calendar window first (relative day, last weekday, or segment). If none, fall back to preset.
+        const window = computeWindowFromIntent({
+          intent,
+          nowMs,
+          timeZone: effectiveTimeZone,
+        });
+        const effectivePreset: RetrievalRangePreset = window
+          ? "all"
+          : intent.kind === "preset"
+            ? intent.preset
+            : requestedPreset && requestedPreset !== "all"
+              ? requestedPreset
+              : "all";
+
+        const requestedSourceTypes = (
+          Array.isArray(sourceTypes) ? sourceTypes : undefined
+        ) as SourceType[] | undefined;
+        const allowedSourceTypes = (() => {
+          // Files mode: only docs, no slack
+          if (isFilesMode) return ["docs"] satisfies SourceType[];
+          if (slackContextAllowed) return requestedSourceTypes;
+          if (requestedSourceTypes) {
+            return requestedSourceTypes.filter((t) => t !== "slack");
+          }
+          return ["docs"] satisfies SourceType[];
+        })();
+        const effectiveSourceTypes = docLockFilenameHint
+          ? (["docs"] satisfies SourceType[])
+          : allowedSourceTypes;
+        const namespaces = namespacesForSourceTypes(
+          effectiveSourceTypes,
+          activeProjectId,
+          isDefaultProject
+        );
+
+        if (shouldLogRetrieval) {
+          console.log("Chat Retrieval Debug:", {
+            activeProjectId,
+            isDefaultProject,
+            namespaces,
+            requestedSourceTypes: effectiveSourceTypes,
+            ignoredDocIds,
+            targetDocIds: effectiveTargetDocIds,
+            docLockFilenameHint,
+            retrievalTimeIntent: intent,
+            retrievalTimeFilterMode: timeFilterMode,
+            retrievalTimeFilterModeDefault: timeFilterModeInfo.defaultMode,
+            retrievalTimeFilterModeProjectAllowlisted:
+              timeFilterModeInfo.projectAllowlisted,
+            retrievalRangePreset: effectivePreset,
+            retrievalRangePresetRequested: requestedPreset,
+            retrievalTimeZone: effectiveTimeZone,
+            retrievalRelativeDay:
+              intent.kind === "relativeDay" ? intent.relativeDay : null,
+          });
+        }
+
+        const presetStartMs = startMsForPreset(effectivePreset, nowMs);
+        const rangeStartMs = window ? window.startMs : presetStartMs;
+        const rangeEndMs = window ? window.endMs : nowMs;
+        const rowTimestampTopK = 160;
+        const perNamespaceTopK =
+          timeFilterMode === "rowTimestamp" && rangeStartMs !== null
+            ? rowTimestampTopK
+            : 24;
+
+        if (window) {
+          const startLocal = new Intl.DateTimeFormat("en-US", {
+            timeZone: effectiveTimeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(new Date(window.startMs));
+          const endLocal = new Intl.DateTimeFormat("en-US", {
+            timeZone: effectiveTimeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(new Date(window.endMs));
+          if (shouldLogRetrieval) {
+            console.log("Chat Retrieval Relative Day Window:", {
+              retrievalRelativeDay:
+                intent.kind === "relativeDay" ? intent.relativeDay : null,
+              retrievalTimeZone: effectiveTimeZone,
+              startLocal,
+              endLocal,
+              startMs: window.startMs,
+              endMs: window.endMs,
+            });
+          }
+        }
+
+        const retrievalQuery = (() => {
+          const cleaned = stripMatchedText(userText, intent.matchedText);
+          return cleaned.length > 0 ? cleaned : userText;
+        })();
+        if (shouldLogRetrieval) {
+          console.log("Chat Retrieval Query:", {
+            userTextLength: userText.length,
+            retrievalQueryLength: retrievalQuery.length,
+            retrievalQueryPreview:
+              retrievalQuery.length > 200
+                ? `${retrievalQuery.slice(0, 200)}…`
+                : retrievalQuery,
+          });
+        }
+
+        const queryNamespace = async ({
+          ns,
+          topK,
+          includeSourceCreatedAtMsFilter,
+        }: {
+          ns: string;
+          topK: number;
+          includeSourceCreatedAtMsFilter: boolean;
+        }) => {
+          const filterParts: unknown[] = [];
+
+          // effectiveTargetDocIds takes precedence - if provided, only include those docs
+          if (effectiveTargetDocIds && effectiveTargetDocIds.length > 0) {
+            filterParts.push(["doc_id", "In", effectiveTargetDocIds]);
+          } else if (ignoredDocIds && ignoredDocIds.length > 0) {
+            filterParts.push(["Not", ["doc_id", "In", ignoredDocIds]]);
+          }
+
+          if (includeSourceCreatedAtMsFilter && rangeStartMs !== null) {
+            filterParts.push(["sourceCreatedAtMs", "Gte", rangeStartMs]);
+            filterParts.push(["sourceCreatedAtMs", "Lt", rangeEndMs]);
+          }
+
+          const filters =
+            filterParts.length === 0
+              ? undefined
+              : filterParts.length === 1
+                ? filterParts[0]
+                : ["And", filterParts];
+
+          const nsRows = await queryTurbopuffer({
+            query: retrievalQuery,
+            topK,
+            namespace: ns,
+            filters,
+          });
+
+          const inferredSourceType = inferSourceTypeFromNamespace(ns);
+          return nsRows.map((r) => ({
+            ...r,
+            sourceType:
+              typeof (r as any).sourceType === "string"
+                ? (r as any).sourceType
+                : (inferredSourceType ?? ""),
+          }));
+        };
+
+        const shouldUseSourceCreatedAtMsFilter =
+          timeFilterMode === "sourceCreatedAtMs" && rangeStartMs !== null;
+
+        let appliedTimeFilterMode: RetrievalTimeFilterMode = timeFilterMode;
+
+        let rowsByNamespace = await Promise.all(
+          namespaces.map(async (ns) =>
+            queryNamespace({
+              ns,
+              topK: perNamespaceTopK,
+              includeSourceCreatedAtMsFilter: shouldUseSourceCreatedAtMsFilter,
+            })
+          )
+        );
+
+        if (docLockFilenameHint) {
+          const hint = docLockFilenameHint.toLowerCase();
+          rowsByNamespace = rowsByNamespace.map((nsRows) =>
+            nsRows.filter((row) => {
+              const filename =
+                typeof (row as any).filename === "string"
+                  ? (row as any).filename
+                  : "";
+              return filename.toLowerCase().includes(hint);
+            })
+          );
+        }
+
+        // Auto-fallback: if server-side `sourceCreatedAtMs` filtering yields no candidates,
+        // retry without that filter and rely on per-row timestamps (`ts`/`sourceCreatedAtMs`)
+        // in the post-filter step. This avoids requiring per-project allowlisting.
+        const initialRowsCount = rowsByNamespace.reduce(
+          (sum, nsRows) => sum + nsRows.length,
+          0
+        );
+        if (initialRowsCount === 0 && shouldUseSourceCreatedAtMsFilter) {
+          appliedTimeFilterMode = "rowTimestamp";
+          if (shouldLogRetrieval) {
+            console.log("Chat Retrieval Time Filter Fallback:", {
+              reason: "no_rows_with_sourceCreatedAtMs_filter",
+              rangeStartMs,
+              rangeEndMs,
+              namespaces,
+              topK: rowTimestampTopK,
+            });
+          }
+          rowsByNamespace = await Promise.all(
+            namespaces.map(async (ns) =>
+              queryNamespace({
+                ns,
+                topK: rowTimestampTopK,
+                includeSourceCreatedAtMsFilter: false,
+              })
+            )
+          );
+          if (docLockFilenameHint) {
+            const hint = docLockFilenameHint.toLowerCase();
+            rowsByNamespace = rowsByNamespace.map((nsRows) =>
+              nsRows.filter((row) => {
+                const filename =
+                  typeof (row as any).filename === "string"
+                    ? (row as any).filename
+                    : "";
+                return filename.toLowerCase().includes(hint);
+              })
+            );
+          }
+        }
+
+        const fusedRows = rowsByNamespace.flat().sort((a, b) => {
+          const da =
+            typeof a.$dist === "number" ? a.$dist : Number.POSITIVE_INFINITY;
+          const db =
+            typeof b.$dist === "number" ? b.$dist : Number.POSITIVE_INFINITY;
+          return da - db;
+        });
+
+        const timeFilteredRows =
+          rangeStartMs === null
+            ? fusedRows
+            : fusedRows.filter((row) => {
+                const tsMs = timestampMsFromRow(row);
+                return (
+                  tsMs !== null && tsMs >= rangeStartMs && tsMs < rangeEndMs
+                );
+              });
+
+        if (shouldLogRetrieval) {
+          console.log("Chat Retrieval Time Filter:", {
+            retrievalRangePreset: effectivePreset,
+            retrievalRangePresetRequested: requestedPreset,
+            retrievalTimeFilterModeApplied: appliedTimeFilterMode,
+            rangeStartMs,
+            rangeEndMs,
+            nowMs,
+            fusedRowsCount: fusedRows.length,
+            timeFilteredRowsCount: timeFilteredRows.length,
+          });
+        }
+
+        // Only treat as aggregation query if in Finance mode
+        const isAggregationQuery =
+          isFinanceMode && AGGREGATION_HINT_RE.test(userText);
+
+        const cappedRows: typeof timeFilteredRows = [];
+        const docIdCounts = new Map<string, number>();
+        const maxChunksPerDoc = isAggregationQuery ? 1 : 10;
+        for (const row of timeFilteredRows) {
+          const sourceType =
+            typeof (row as any).sourceType === "string"
+              ? (row as any).sourceType
+              : "";
+          if (sourceType === "docs") {
+            const docId =
+              typeof (row as any).doc_id === "string"
+                ? (row as any).doc_id
+                : null;
+            if (docId) {
+              const count = docIdCounts.get(docId) ?? 0;
+              if (count >= maxChunksPerDoc) continue;
+              docIdCounts.set(docId, count + 1);
+            }
+          }
+          cappedRows.push(row);
+        }
+
+        const filteredRows = cappedRows.slice(0, isAggregationQuery ? 120 : 24);
+        let usedRows = filteredRows.slice(0, isAggregationQuery ? 40 : 8);
+
+        const lastMentionName = extractLastMentionName(userText);
+        if (lastMentionName) {
+          const needle = lastMentionName.toLowerCase();
+          let bestRow: Record<string, unknown> | null = null;
+          let bestTsMs = -1;
+
+          for (const row of timeFilteredRows) {
+            const r = row as Record<string, unknown>;
+            const sourceType =
+              typeof r.sourceType === "string" ? r.sourceType : "";
+            if (sourceType !== "slack") continue;
+
+            const userName = typeof r.user_name === "string" ? r.user_name : "";
+            const userEmail =
+              typeof r.user_email === "string" ? r.user_email : "";
+            const matchesName =
+              (userName && userName.toLowerCase().includes(needle)) ||
+              (userEmail && userEmail.toLowerCase().includes(needle));
+            if (!matchesName) continue;
+
+            const tsMs = timestampMsFromRow(r);
+            if (tsMs === null) continue;
+            if (tsMs > bestTsMs) {
+              bestTsMs = tsMs;
+              bestRow = r;
+            }
+          }
+
+          if (bestRow && bestTsMs > 0) {
+            usedRows = [bestRow as any];
+            retrievedContext = formatNewestSlackMatch({
+              name: lastMentionName,
+              row: bestRow,
+              tsMs: bestTsMs,
+            });
+          }
+        }
+
+        sources = usedRows;
+        // Debug logging: summarize retrieval results without dumping large payloads
+        try {
+          const truncatePreview = (value: unknown) => {
+            if (typeof value !== "string") {
+              return null;
+            }
+            const oneLine = value.replace(/\s+/g, " ").trim();
+            return oneLine.length > 150 ? `${oneLine.slice(0, 150)}…` : oneLine;
+          };
+          const summarizeValue = (value: unknown) => {
+            if (value === null) return null;
+            if (typeof value === "string") {
+              const oneLine = value.replace(/\s+/g, " ").trim();
+              return oneLine.length > 200
+                ? `${oneLine.slice(0, 200)}…`
+                : oneLine;
+            }
+            if (typeof value === "number")
+              return Number.isFinite(value) ? value : null;
+            if (typeof value === "boolean") return value;
+            if (Array.isArray(value)) {
+              return { type: "array", length: value.length };
+            }
+            if (typeof value === "object") {
+              return { type: "object" };
+            }
+            return { type: typeof value };
+          };
+          const summarizeRow = (row: unknown) => {
+            if (!row || typeof row !== "object") {
+              return { type: typeof row };
+            }
+            const r = row as Record<string, unknown>;
+            const keys = Object.keys(r).sort();
+            const attributes: Record<string, unknown> = {};
+
+            let included = 0;
+            for (const key of keys) {
+              if (key === "content") continue;
+              if (key === "vector") continue;
+              if (key === "$dist") continue;
+              attributes[key] = summarizeValue(r[key]);
+              included += 1;
+              if (included >= 40) break;
+            }
+
+            const content = typeof r.content === "string" ? r.content : "";
+            return {
+              keys,
+              attributes,
+              contentLength: content.length,
+              contentPreview: truncatePreview(content),
+            };
+          };
+          const byNamespaceCounts = rowsByNamespace.map((nsRows, i) => ({
+            namespace: namespaces[i],
+            rowsCount: nsRows.length,
+          }));
+          if (shouldLogRetrieval) {
+            console.log("Turbopuffer retrieval succeeded", {
+              queryLength: userText.length,
+              requestedSourceTypes,
+              namespaces,
+              perNamespace: byNamespaceCounts,
+              fusedRowsCount: fusedRows.length,
+              selectedRowsCount: filteredRows.length,
+              sample: filteredRows.slice(0, 12).map((r) => ({
+                $dist:
+                  typeof r.$dist === "number"
+                    ? Number(r.$dist.toFixed(3))
+                    : r.$dist,
+                sourceType:
+                  typeof (r as any).sourceType === "string"
+                    ? (r as any).sourceType
+                    : typeof (r as any).source === "string"
+                      ? (r as any).source
+                      : null,
+                preview: truncatePreview((r as any).content),
+                docId:
+                  typeof (r as any).doc_id === "string"
+                    ? (r as any).doc_id
+                    : null,
+                url: typeof (r as any).url === "string" ? (r as any).url : null,
+                filename:
+                  typeof (r as any).filename === "string"
+                    ? (r as any).filename
+                    : null,
+                blobUrl:
+                  typeof (r as any).blob_url === "string"
+                    ? (r as any).blob_url
+                    : null,
+                projectId:
+                  typeof (r as any).project_id === "string"
+                    ? (r as any).project_id
+                    : null,
+                sourceCreatedAtMs:
+                  typeof (r as any).sourceCreatedAtMs === "number"
+                    ? (r as any).sourceCreatedAtMs
+                    : typeof (r as any).sourceCreatedAtMs === "string"
+                      ? (r as any).sourceCreatedAtMs
+                      : null,
+                ts: typeof (r as any).ts === "string" ? (r as any).ts : null,
+                channelName:
+                  typeof (r as any).channel_name === "string"
+                    ? (r as any).channel_name
+                    : null,
+                userName:
+                  typeof (r as any).user_name === "string"
+                    ? (r as any).user_name
+                    : null,
+                userEmail:
+                  typeof (r as any).user_email === "string"
+                    ? (r as any).user_email
+                    : null,
+                row: summarizeRow(r),
+              })),
+            });
+          }
+        } catch (_e) {
+          // Ignore logging failures
+        }
+        if (!retrievedContext) {
+          if (isAggregationQuery) {
+            retrievedContext = usedRows
+              .map((row, index) => {
+                const contentValue = (row as any).content ?? "";
+                const content = String(contentValue);
+                const filename =
+                  typeof (row as any).filename === "string"
+                    ? (row as any).filename
+                    : "";
+                const channel =
+                  typeof (row as any).channel_name === "string"
+                    ? (row as any).channel_name
+                    : "";
+                const header = filename
+                  ? filename
+                  : channel
+                    ? `#${channel}`
+                    : `result ${index + 1}`;
+                const truncated =
+                  content.length > 700 ? `${content.slice(0, 700)}…` : content;
+                return `${header}\n${truncated}`;
+              })
+              .join("\n\n");
+          } else {
+            retrievedContext = formatRetrievedContext(usedRows);
+          }
+        }
+        const MAX_RETRIEVED_CONTEXT_CHARS = isAggregationQuery
+          ? 20_000
+          : 12_000;
+        if (retrievedContext.length > MAX_RETRIEVED_CONTEXT_CHARS) {
+          retrievedContext =
+            retrievedContext.slice(0, MAX_RETRIEVED_CONTEXT_CHARS) +
+            "\n\n[Context truncated]";
+        }
+      } catch (err) {
+        // Retrieval is best-effort; proceed without external context on failure
+        console.warn("Retrieval failed (embeddings/turbopuffer)", err);
+      }
+    }
+
+    await saveMessages({
+      messages: [
+        {
+          chatId: id,
+          id: message.id,
+          role: "user",
+          parts: message.parts,
+          attachments: [],
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+    const streamId = generateUUID();
+    await createStreamId({ streamId, chatId: id });
+
+    let finalMergedUsage: AppUsage | undefined;
+
+    const stream = createUIMessageStream({
+      execute: async ({ writer: dataStream }) => {
+        let citationInstructions: string | null = null;
+        // Early check for finance queries to skip citations - use a simple pattern match
+        // on the raw user text before we process sources
+        const userTextParts = message.parts.filter(
+          (
+            part
+          ): part is Extract<
+            (typeof message.parts)[number],
+            { type: "text" }
+          > => part.type === "text"
+        );
+        const rawUserText = userTextParts
+          .map((part) => part.text)
+          .join("\n")
+          .toLowerCase();
+        const isLikelyFinanceQuery =
+          AGGREGATION_HINT_RE.test(rawUserText) ||
+          FINANCE_DATA_QUERY_RE.test(rawUserText) ||
+          INCOME_DATA_QUERY_RE.test(rawUserText) ||
+          INVOICE_REVENUE_RE.test(rawUserText);
+
+        // Skip citations for finance queries - they use deterministic database queries
+        if (sources.length > 0 && !isLikelyFinanceQuery) {
+          const seen = new Set<string>();
+          const uniqueSources = [];
+          for (const s of sources) {
+            const sourceType =
+              typeof s.sourceType === "string" ? s.sourceType : "";
+            const docId = typeof s.doc_id === "string" ? s.doc_id : "";
+            const blobUrl = typeof s.blob_url === "string" ? s.blob_url : "";
+            const sourceUrl =
+              typeof (s as any).source_url === "string"
+                ? (s as any).source_url
+                : "";
+            const slackUrl =
+              typeof (s as any).url === "string" ? (s as any).url : "";
+            const channelName =
+              typeof (s as any).channel_name === "string"
+                ? (s as any).channel_name
+                : "";
+            const preferredUrl =
+              sourceType === "docs" &&
+              sourceUrl.toLowerCase().includes("sharepoint.com")
+                ? sourceUrl
+                : sourceType === "slack" && slackUrl
+                  ? slackUrl
+                  : blobUrl || sourceUrl;
+            const filename = typeof s.filename === "string" ? s.filename : "";
+            const category =
+              typeof (s as any).doc_category === "string"
+                ? (s as any).doc_category
+                : "";
+            const description =
+              typeof (s as any).doc_description === "string"
+                ? (s as any).doc_description
+                : "";
+            const projectId =
+              typeof (s as any).project_id === "string"
+                ? (s as any).project_id
+                : "";
+            const key =
+              sourceType === "docs" && projectId && filename
+                ? `${sourceType}:${projectId}:${filename}`
+                : docId
+                  ? `${sourceType}:${docId}`
+                  : blobUrl
+                    ? `${sourceType}:${blobUrl}`
+                    : `${sourceType}:${filename}`;
+
+            if (seen.has(key)) continue;
+            seen.add(key);
+            uniqueSources.push({
+              sourceType,
+              docId: docId || undefined,
+              filename: filename || undefined,
+              channelName: channelName || undefined,
+              category: category || undefined,
+              description: description || undefined,
+              documentType:
+                typeof (s as any).document_type === "string"
+                  ? (s as any).document_type
+                  : undefined,
+              blobUrl: preferredUrl || undefined,
+              content:
+                typeof s.content === "string"
+                  ? s.content.slice(0, 500)
+                  : undefined,
+            });
+          }
+
+          const sourceLines = uniqueSources
+            .slice(0, 20)
+            .map((s, idx) => {
+              const label =
+                (s.sourceType === "slack" && s.channelName
+                  ? `#${s.channelName}`
+                  : null) ??
+                s.filename ??
+                (typeof s.blobUrl === "string" && s.blobUrl.length > 0
+                  ? s.blobUrl
+                  : s.sourceType || "Source");
+              const docIdSuffix =
+                typeof s.docId === "string" && s.docId.length > 0
+                  ? ` (doc_id=${s.docId})`
+                  : "";
+              const typeSuffix =
+                typeof (s as any).documentType === "string"
+                  ? ` (document_type=${String((s as any).documentType)})`
+                  : "";
+              return `[${idx + 1}] ${label}${docIdSuffix}${typeSuffix}`;
+            })
+            .join("\n");
+          const maxCitationIndex = Math.min(uniqueSources.length, 20);
+          citationInstructions = sourceLines.length
+            ? `\n\nSources (for citations):\n${sourceLines}\n\nIf you use retrieved context, cite it inline using the exact marker format \`【N】\` where N is the source number above. Valid N values are 1 through ${maxCitationIndex}. Never use any other number. Only include citations you actually used; if you didn't use any sources, include no \`【N】\` markers. Do not add a separate "Citations" section.`
+            : null;
+
+          dataStream.write({
+            type: "data-sources",
+            data: uniqueSources,
+          });
+        }
+
+        // System prompt depends on agent mode
+        // All prompts include email formatting instructions for consistent email rendering
+        const emailAgentSystemPrompt =
+          getEmailAgentSystemPrompt(userDisplayName);
+
+        // Inline Q&A mode: simple document Q&A only, no email/slides/etc
+        const inlineQASystemPrompt = `You are a helpful AI assistant answering questions about documents.
+
+Your ONLY job is to answer questions based on the provided document context. Do NOT:
+- Draft emails
+- Create slides or presentations
+- Suggest creating any artifacts
+- Offer to do anything beyond answering the user's question
+
+Rules:
+- Answer questions directly using the retrieved document context.
+- Quote specific passages when helpful.
+- Reference which documents you used naturally (e.g., "According to [filename]...").
+- Be concise and focused on the user's question.
+- If the context doesn't contain the answer, say so.`;
+
+        const systemPrompt = isInlineQAMode
+          ? inlineQASystemPrompt
+          : customAgentSystemPrompt
+            ? `You are a custom agent called "${customAgentName || "Custom Agent"}" in Flowchat.\n\n${customAgentSystemPrompt}\n\n---\n\nRules:\n- Answer questions using the retrieved document context when available. Quote specific passages when helpful.\n- When presenting structured results (comparisons, lists), prefer GitHub-flavored markdown tables.\n- Reference which documents you used in your answer naturally (e.g., "According to [filename]...").\n\n${emailFormattingPrompt}\n\nKeep responses clear, accurate, and helpful.`
+            : isEmailMode
+              ? `You are Flowchat in Email Mode.\n\n${emailAgentSystemPrompt}\n\nRules:\n- Focus on writing clear, concise emails that help with proposals and negotiations.\n- Keep emails short and to the point.\n- Never sound like a salesperson.\n- Be technical but not overly technical.\n- Always end emails with "Cheers" instead of "Best".\n- Be creative in your approach.\n- If retrieved context is available, use it to inform your email content.\n\n${emailFormattingPrompt}`
+              : isFinanceMode
+                ? `You are Flowchat in Finance Mode.\n\nYou answer questions about financial data from uploaded bank statements, credit card statements, and invoices.\n\nYou have access to the runFinanceAgent tool for querying financial data.\n\nRules:\n- CRITICAL: For finance, totals, or data analysis, you MUST call runFinanceAgent. Do not attempt to answer from memory or background context alone.\n- Use runFinanceAgent for any totals/sums/counts/aggregations.\n- If you need both a total and a breakdown (e.g. "by month"), ensure you ask the specialist for both.\n- When presenting structured numeric results (breakdowns, comparisons, lists), prefer GitHub-flavored markdown tables.\n- If the user asks about a month by name (e.g. "November") but does not specify a year, assume the year is the current year.\n- If the user's message is a follow-up like "break it down" / "by category" / "show me the list" and omits time or entity, infer from the conversation.\n- If entity ambiguity exists (Personal vs one or more businesses), ask a clarifying question before answering.\n- Prefer bank-statement deposits for income-like questions, excluding transfers.\n\n${emailFormattingPrompt}\n\nKeep clarifying questions short and actionable.`
+                : isFilesMode
+                  ? `You are a helpful assistant answering questions about files and notes.\n\nYour job is to answer questions based on the uploaded files and notes in this project.\n\nRules:\n- Answer questions directly using the retrieved document context.\n- Quote specific passages when helpful.\n- Reference which documents you used naturally (e.g., "According to [filename]...").\n- Be concise and focused on the user's question.\n- If the context doesn't contain the answer, say so.\n\n${emailFormattingPrompt}`
+                  : `You are Flowchat, your AI assistant for project documentation and collaboration.\n\nYou help teams with:\n- Answering questions about uploaded project documents and files\n- Taking notes and organizing project information\n- Creating slide decks and presentations\n- Drafting emails and communications\n- Generating status updates and reports\n- Tracking tasks and action items\n\nRetrieved context (uploaded docs, notes) is your primary source for answering questions about project content.\n\nRules:\n- Answer questions using the retrieved document context. Quote specific passages when helpful.\n- When presenting structured results (comparisons, lists), prefer GitHub-flavored markdown tables.\n- Reference which documents you used in your answer naturally (e.g., "According to [filename]...").\n- For document Q&A, focus on accuracy and cite specific sections from the documents.\n- Be helpful, concise, and actionable.\n\n${emailFormattingPrompt}`
+                  + (folderNotSynced
+                    ? "\n\nIMPORTANT: The user pasted a Google Drive folder link, but no files from that folder have been synced yet. Let the user know they need to sync files from this folder first via the Integrations page before you can answer questions about its contents."
+                    : "");
+
+        const baseMessages = convertToModelMessages(uiMessages);
+
+        const lastUserMessage = uiMessages
+          .slice()
+          .reverse()
+          .find((m) => m.role === "user");
+        const lastUserTextParts = lastUserMessage
+          ? lastUserMessage.parts.filter(
+              (
+                part
+              ): part is Extract<
+                (typeof lastUserMessage.parts)[number],
+                { type: "text" }
+              > => part.type === "text"
+            )
+          : [];
+        const lastUserText = lastUserTextParts
+          .map((part) => part.text)
+          .join("\n")
+          .slice(0, 4000);
+
+        // If the user replies with only an entity (e.g. "personal") after we asked
+        // "Personal or which business?", treat it as answering the prior clarification and
+        // re-run the prior finance question with that entity included.
+        const entityOnlyReply = (() => {
+          const t = lastUserText.trim().toLowerCase();
+          if (t === "personal" || t === "personal.") return "personal";
+          if (t === "business" || t === "business.") return "business";
+          return null;
+        })();
+
+        const expandEntityOnlyReply = (() => {
+          if (!entityOnlyReply) return null;
+          // Look for the immediately preceding assistant prompt asking for entity.
+          const lastAssistant = uiMessages
+            .slice(0, -1)
+            .slice()
+            .reverse()
+            .find((m) => m.role === "assistant");
+          const lastAssistantText = lastAssistant
+            ? lastAssistant.parts
+                .filter(
+                  (
+                    p
+                  ): p is Extract<
+                    (typeof lastAssistant.parts)[number],
+                    { type: "text" }
+                  > => p.type === "text"
+                )
+                .map((p) => p.text)
+                .join(" ")
+                .toLowerCase()
+            : "";
+          const askedEntity =
+            lastAssistantText.includes("personal") &&
+            lastAssistantText.includes("business");
+          if (!askedEntity) return null;
+
+          // Find the previous non-trivial user question.
+          const priorUser = uiMessages
+            .slice(0, -1)
+            .slice()
+            .reverse()
+            .find((m) => {
+              if (m.role !== "user") return false;
+              const txt = m.parts
+                .filter(
+                  (
+                    p
+                  ): p is Extract<(typeof m.parts)[number], { type: "text" }> =>
+                    p.type === "text"
+                )
+                .map((p) => p.text)
+                .join(" ")
+                .trim();
+              if (!txt) return false;
+              const lower = txt.toLowerCase();
+              return lower !== "personal" && lower !== "business";
+            });
+          if (!priorUser) return null;
+          const priorText = priorUser.parts
+            .filter(
+              (
+                p
+              ): p is Extract<
+                (typeof priorUser.parts)[number],
+                { type: "text" }
+              > => p.type === "text"
+            )
+            .map((p) => p.text)
+            .join("\n")
+            .slice(0, 3500);
+
+          // Only treat this as a clarification for FinanceAgent when the prior user message
+          // looks like a finance *data* query (totals/lists/breakdowns), not general planning.
+          const priorLower = priorText.toLowerCase();
+          const priorLooksLikeFinanceData =
+            AGGREGATION_HINT_RE.test(priorLower) ||
+            FINANCE_DATA_QUERY_RE.test(priorLower) ||
+            INCOME_DATA_QUERY_RE.test(priorLower);
+          if (!priorLooksLikeFinanceData) return null;
+          return `${priorText}\n\nEntity: ${entityOnlyReply === "personal" ? "Personal" : "Business"}`;
+        })();
+
+        const expandBusinessNameOnlyReply = await (async () => {
+          const tRaw = lastUserText.trim();
+          const tLower = tRaw.toLowerCase();
+          if (!tRaw) return null;
+          if (tLower === "personal" || tLower === "personal.") return null;
+          if (tLower === "business" || tLower === "business.") return null;
+
+          // Look for the immediately preceding assistant prompt asking for business.
+          const lastAssistant = uiMessages
+            .slice(0, -1)
+            .slice()
+            .reverse()
+            .find((m) => m.role === "assistant");
+          const lastAssistantText = lastAssistant
+            ? lastAssistant.parts
+                .filter(
+                  (
+                    p
+                  ): p is Extract<
+                    (typeof lastAssistant.parts)[number],
+                    { type: "text" }
+                  > => p.type === "text"
+                )
+                .map((p) => p.text)
+                .join(" ")
+                .toLowerCase()
+            : "";
+          const askedBusiness = lastAssistantText.includes("which business");
+          if (!askedBusiness) return null;
+          if (!activeProjectId) return null;
+
+          const summary = await getProjectEntitySummaryForUser({
+            userId: session.user.id,
+            projectId: activeProjectId,
+          });
+          const businessNames = summary
+            .filter(
+              (e) =>
+                e.entityKind === "business" && typeof e.entityName === "string"
+            )
+            .map((e) => (e.entityName as string).trim())
+            .filter((n) => n.length > 0);
+
+          // Try exact match first
+          let matchedBusiness =
+            businessNames.find((n) => n.toLowerCase() === tLower) ?? null;
+
+          // If no exact match, try removing "business" suffix and matching
+          if (!matchedBusiness) {
+            const withoutBusiness = tLower
+              .replace(/\s+business\s*\.?$/i, "")
+              .trim();
+            if (withoutBusiness.length > 0) {
+              matchedBusiness =
+                businessNames.find(
+                  (n) => n.toLowerCase() === withoutBusiness
+                ) ?? null;
+            }
+          }
+
+          // If still no match, try substring matching (business name contained in user text)
+          if (!matchedBusiness) {
+            matchedBusiness =
+              businessNames
+                .map((n) => ({ n, lower: n.toLowerCase() }))
+                .filter(
+                  ({ lower }) => lower.length >= 3 && tLower.includes(lower)
+                )
+                .sort((a, b) => b.lower.length - a.lower.length)[0]?.n ?? null;
+          }
+
+          if (!matchedBusiness) return null;
+
+          // Find the previous non-trivial user question.
+          const priorUser = uiMessages
+            .slice(0, -1)
+            .slice()
+            .reverse()
+            .find((m) => {
+              if (m.role !== "user") return false;
+              const txt = m.parts
+                .filter(
+                  (
+                    p
+                  ): p is Extract<(typeof m.parts)[number], { type: "text" }> =>
+                    p.type === "text"
+                )
+                .map((p) => p.text)
+                .join(" ")
+                .trim();
+              if (!txt) return false;
+              const lower = txt.toLowerCase();
+              return (
+                lower !== "personal" &&
+                lower !== "business" &&
+                lower !== matchedBusiness.toLowerCase()
+              );
+            });
+          if (!priorUser) return null;
+          const priorText = priorUser.parts
+            .filter(
+              (
+                p
+              ): p is Extract<
+                (typeof priorUser.parts)[number],
+                { type: "text" }
+              > => p.type === "text"
+            )
+            .map((p) => p.text)
+            .join("\n")
+            .slice(0, 3500);
+
+          const priorLower = priorText.toLowerCase();
+          const priorLooksLikeFinanceData =
+            AGGREGATION_HINT_RE.test(priorLower) ||
+            FINANCE_DATA_QUERY_RE.test(priorLower) ||
+            INCOME_DATA_QUERY_RE.test(priorLower);
+          if (!priorLooksLikeFinanceData) return null;
+
+          return `${priorText}\n\nBusiness: ${matchedBusiness}`;
+        })();
+
+        const normalizedLastUserText =
+          expandEntityOnlyReply ?? expandBusinessNameOnlyReply ?? lastUserText;
+        // Only treat as aggregation query if in Finance mode
+        const isAggregationQuery =
+          isFinanceMode && AGGREGATION_HINT_RE.test(normalizedLastUserText);
+
+        const lastAssistantText = (() => {
+          const lastAssistant = uiMessages
+            .slice()
+            .reverse()
+            .find((m) => m.role === "assistant");
+          if (!lastAssistant) return "";
+          return lastAssistant.parts
+            .filter(
+              (
+                p
+              ): p is Extract<
+                (typeof lastAssistant.parts)[number],
+                { type: "text" }
+              > => p.type === "text"
+            )
+            .map((p) => p.text)
+            .join(" ")
+            .trim();
+        })();
+
+        const assistantAskedForTimeWindow =
+          /\bwhat\s+time\s+window\s+should\s+i\s+use\b/i.test(
+            lastAssistantText
+          );
+
+        // Time-window replies like "June and July 2025" often happen immediately after FinanceAgent asks
+        // for a date range. Treat those as finance follow-ups so we route back into FinanceAgent.
+        const isFinanceTimeWindowReply =
+          assistantAskedForTimeWindow &&
+          TIME_RANGE_HINT_RE.test(normalizedLastUserText);
+
+        // Only detect as finance query if user has explicitly selected Finance mode
+        const isFinanceQuery =
+          isFinanceMode &&
+          (isAggregationQuery ||
+            FINANCE_DATA_QUERY_RE.test(normalizedLastUserText) ||
+            INCOME_DATA_QUERY_RE.test(normalizedLastUserText) ||
+            INVOICE_REVENUE_RE.test(normalizedLastUserText) ||
+            FINANCE_FOLLOWUP_RE.test(normalizedLastUserText) ||
+            isFinanceTimeWindowReply ||
+            Boolean(expandEntityOnlyReply) ||
+            Boolean(expandBusinessNameOnlyReply));
+
+        const financeQuestionForAgent = (() => {
+          if (expandEntityOnlyReply) return expandEntityOnlyReply;
+          if (expandBusinessNameOnlyReply) return expandBusinessNameOnlyReply;
+          if (
+            !FINANCE_FOLLOWUP_RE.test(normalizedLastUserText) &&
+            !isFinanceTimeWindowReply
+          ) {
+            return normalizedLastUserText;
+          }
+
+          const hasTime =
+            /\b(19\d{2}|20\d{2})\b/.test(normalizedLastUserText) ||
+            /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i.test(
+              normalizedLastUserText
+            );
+          const hasCategory =
+            /\b(grocer|coffee|travel|dining|restaurant|gas|subscription)\b/i.test(
+              normalizedLastUserText
+            );
+          const hasEntity =
+            /\b(personal|business|amex|american express|credit card|card)\b/i.test(
+              normalizedLastUserText
+            );
+
+          // If it already includes key filters, don't expand.
+          if (hasTime && (hasCategory || hasEntity))
+            return normalizedLastUserText;
+
+          // Add a small slice of recent turns so FinanceAgent can resolve "those merchants".
+          const recent = uiMessages.slice(-8).map((m) => {
+            const role = m.role === "user" ? "User" : "Assistant";
+            const text = m.parts
+              .filter(
+                (p): p is Extract<(typeof m.parts)[number], { type: "text" }> =>
+                  p.type === "text"
+              )
+              .map((p) => p.text)
+              .join(" ")
+              .trim();
+            return text ? `${role}: ${text}` : "";
+          });
+          const ctx = recent.filter((s) => s.length > 0).join("\n");
+          const capped =
+            ctx.length > 1600 ? `${ctx.slice(-1600)}\n` : `${ctx}\n`;
+          return `${normalizedLastUserText}\n\nContext (recent turns):\n${capped}`;
+        })();
+
+        // Hard guarantee: for finance questions, directly call FinanceAgent instead of relying on the
+        // base model to emit a tool call (some models / generations can "say" they'll call a tool
+        // without actually invoking it).
+        if (isFinanceQuery) {
+          dataStream.write({
+            type: "data-agentStatus",
+            data: {
+              agent: "Finance Agent",
+              message: "Consulting Finance Agent...",
+            },
+          });
+
+          // Pass all selected entities to the finance agent
+          const entityHints =
+            selectedEntities && selectedEntities.length > 0
+              ? selectedEntities.map((e) => ({
+                  entity_kind: e.kind,
+                  entity_name:
+                    e.kind === "business" ? (e.name ?? undefined) : undefined,
+                }))
+              : undefined;
+
+          // Pass selected time range to the finance agent
+          // Only pass if it has valid date_start and date_end, or is "All time"
+          const timeRange =
+            selectedTimeRange &&
+            ((selectedTimeRange.date_start && selectedTimeRange.date_end) ||
+              (selectedTimeRange.type === "preset" &&
+                selectedTimeRange.label === "All time"))
+              ? {
+                  type: selectedTimeRange.type,
+                  label: selectedTimeRange.label,
+                  date_start: selectedTimeRange.date_start,
+                  date_end: selectedTimeRange.date_end,
+                }
+              : undefined;
+
+          const agentResult = await runFinanceAgent({
+            session,
+            projectId: activeProjectId,
+            input: {
+              question: financeQuestionForAgent,
+              entity_hints: entityHints,
+              time_range: timeRange,
+            },
+          });
+
+          dataStream.write({
+            type: "data-agentStatus",
+            data: {
+              agent: "",
+              message: "",
+            },
+          });
+
+          // Check if time range selection is needed
+          // Only show time range selector if no time range is already selected
+          if (agentResult.needs_time_selection && !selectedTimeRange) {
+            dataStream.write({
+              type: "data-timeRangeSelector",
+              data: {
+                availableTimeRanges:
+                  agentResult.needs_time_selection.available_time_ranges,
+                defaultTimeRange:
+                  agentResult.needs_time_selection.default_time_range,
+                questionId: generateUUID(),
+              },
+            });
+            const msgId = generateUUID();
+            dataStream.write({ type: "text-start", id: msgId });
+            dataStream.write({
+              type: "text-delta",
+              id: msgId,
+              delta: "Please select a time period for your query:",
+            });
+            dataStream.write({ type: "text-end", id: msgId });
+            return;
+          }
+
+          // Check if entity selection is needed
+          // Only show entity selector if no entities are already selected
+          if (
+            agentResult.needs_entity_selection &&
+            (!selectedEntities || selectedEntities.length === 0)
+          ) {
+            dataStream.write({
+              type: "data-entitySelector",
+              data: {
+                availableEntities:
+                  agentResult.needs_entity_selection.available_entities,
+                questionId: generateUUID(),
+              },
+            });
+            const msgId = generateUUID();
+            dataStream.write({ type: "text-start", id: msgId });
+            dataStream.write({
+              type: "text-delta",
+              id: msgId,
+              delta: "Please tell me the account(s) you'd like to analyze:",
+            });
+            dataStream.write({ type: "text-end", id: msgId });
+            return;
+          }
+
+          let chartWasShown = false;
+          if (agentResult.chart_payload && session.user?.id) {
+            try {
+              const chartDocId = generateUUID();
+              const chartTitle =
+                typeof agentResult.chart_payload.title === "string" &&
+                agentResult.chart_payload.title.trim().length > 0
+                  ? agentResult.chart_payload.title.trim()
+                  : "Chart";
+              await saveDocument({
+                id: chartDocId,
+                title: chartTitle,
+                kind: "chart",
+                content: JSON.stringify(agentResult.chart_payload),
+                userId: session.user.id,
+              });
+              dataStream.write({
+                type: "data-chartDocument",
+                data: { id: chartDocId, title: chartTitle, kind: "chart" },
+              });
+              chartWasShown = true;
+            } catch (_err) {
+              // Best-effort: chart is an enhancement; do not fail the chat response.
+            }
+          }
+
+          const msgId = generateUUID();
+          const text =
+            agentResult.questions_for_user.length > 0
+              ? agentResult.questions_for_user.join(" ")
+              : agentResult.answer_draft.trim().length > 0
+                ? chartWasShown
+                  ? stripMarkdownTables(agentResult.answer_draft)
+                  : agentResult.answer_draft
+                : "I couldn't compute that from the available data. Can you share more details?";
+          dataStream.write({ type: "text-start", id: msgId });
+          dataStream.write({ type: "text-delta", id: msgId, delta: text });
+          dataStream.write({ type: "text-end", id: msgId });
+          return;
+        }
+
+        // For aggregation/finance questions, don't inject RAG-retrieved context into the main prompt.
+        // The frontline is required to call FinanceAgent tools instead of trusting potentially stale context.
+        // EXCEPTION: If we have extractedJsonContext (full structured data from targeted docs),
+        // always include it since that's what they need for aggregation queries.
+        const messagesWithContext = (() => {
+          const hasExtractedJson = extractedJsonContext.length > 0;
+          const hasRagContext = retrievedContext.length > 0;
+
+          // Skip if no context at all, or if only RAG context on aggregation query
+          if (!hasExtractedJson && (!hasRagContext || isAggregationQuery))
+            return baseMessages;
+
+          const lastUserIndex = (() => {
+            for (let i = baseMessages.length - 1; i >= 0; i -= 1) {
+              const m = baseMessages[i] as { role?: unknown };
+              if (m?.role === "user") return i;
+            }
+            return -1;
+          })();
+          if (lastUserIndex === -1) return baseMessages;
+
+          // Build context: targeted doc content takes priority, then RAG context (if not aggregation)
+          let contextContent = "";
+          if (hasExtractedJson) {
+            contextContent += `Content from targeted document(s):\n${extractedJsonContext}\n\n`;
+          }
+          if (hasRagContext && !isAggregationQuery) {
+            contextContent += `Background retrieved context (may be irrelevant):\n\n${retrievedContext}`;
+          }
+          contextContent += citationInstructions ?? "";
+
+          const injected = {
+            role: "user" as const,
+            content: contextContent.trim(),
+          };
+          return [
+            ...baseMessages.slice(0, lastUserIndex),
+            injected,
+            ...baseMessages.slice(lastUserIndex),
+          ];
+        })();
+
+        const isUsingBaseten =
+          (!useOpenAIInference || !process.env.OPENAI_API_KEY) &&
+          Boolean(process.env.BASETEN_API_KEY);
+        const mustUseTextOnly =
+          isUsingBaseten ||
+          hasNonImageFileParts(messagesWithContext as unknown[]);
+        const textOnlyMessages = mustUseTextOnly
+          ? coerceMessagesToTextOnly(messagesWithContext as unknown[])
+          : messagesWithContext;
+
+        // Show custom agent status when using a custom agent
+        if (isCustomAgent && customAgentName) {
+          dataStream.write({
+            type: "data-agentStatus",
+            data: {
+              agent: customAgentName,
+              message: `Using ${customAgentName}...`,
+            },
+          });
+        }
+
+        const result = streamText({
+          model: myProvider.languageModel(selectedChatModel),
+          system: systemPrompt,
+          messages: textOnlyMessages as any,
+          stopWhen: stepCountIs(5),
+          onStepFinish: async (step) => {
+            const shouldDebugAgentToChat =
+              process.env.NODE_ENV !== "production";
+            const shouldDebugFinanceAgentToChat =
+              shouldDebugAgentToChat &&
+              process.env.DEBUG_FINANCE_AGENT_CHAT === "1";
+            const shouldDebugProjectAgentToChat =
+              shouldDebugAgentToChat &&
+              process.env.DEBUG_PROJECT_AGENT_CHAT === "1";
+            const shouldDebugCitationsAgentToChat =
+              shouldDebugAgentToChat &&
+              process.env.DEBUG_CITATIONS_AGENT_CHAT === "1";
+
+            const summarizeAgentOutputForChat = (output: unknown) => {
+              if (typeof output !== "object" || output === null) return output;
+              const o = output as Record<string, unknown>;
+
+              const toolCallsRaw = Array.isArray(o.tool_calls)
+                ? o.tool_calls
+                : [];
+              const tool_calls = toolCallsRaw
+                .filter((tc) => typeof tc === "object" && tc !== null)
+                .slice(0, 25)
+                .map((tc) => {
+                  const t = tc as Record<string, unknown>;
+                  const toolName =
+                    typeof t.toolName === "string" ? t.toolName : "tool";
+                  const input = t.input;
+                  const out = t.output;
+
+                  // Prevent dumping huge result sets into chat.
+                  const outputSummary =
+                    typeof out === "object" && out !== null
+                      ? (() => {
+                          const r = out as Record<string, unknown>;
+                          if (Array.isArray(r.rows)) {
+                            return {
+                              ...r,
+                              rowsCount: r.rows.length,
+                              rows: r.rows.slice(0, 5),
+                            };
+                          }
+                          return r;
+                        })()
+                      : out;
+
+                  return {
+                    toolName,
+                    input,
+                    output: outputSummary,
+                  };
+                });
+
+              return {
+                kind: o.kind,
+                confidence: o.confidence,
+                questions_for_user: o.questions_for_user,
+                assumptions: o.assumptions,
+                answer_draft: o.answer_draft,
+                tool_calls,
+              };
+            };
+
+            if (step.toolCalls.length > 0 || step.toolResults.length > 0) {
+              console.log("[chat] step finish", {
+                stepFinishReason: step.finishReason,
+                toolCalls: step.toolCalls
+                  .filter((c): c is NonNullable<typeof c> => c != null)
+                  .map((c) => ({
+                    toolName: c.toolName,
+                    input: c.input,
+                  })),
+                toolResults: step.toolResults
+                  .filter((r): r is NonNullable<typeof r> => r != null)
+                  .map((r) => ({
+                    toolName: r.toolName,
+                    output: r.output,
+                    preliminary: r.preliminary ?? false,
+                  })),
+              });
+            }
+
+            if (step.toolResults.length > 0) {
+              const toolsToDebug = [
+                shouldDebugFinanceAgentToChat ? "runFinanceAgent" : null,
+                shouldDebugProjectAgentToChat ? "runProjectAgent" : null,
+                shouldDebugCitationsAgentToChat ? "runCitationsAgent" : null,
+              ].filter((t): t is string => typeof t === "string");
+
+              for (const toolName of toolsToDebug) {
+                const results = step.toolResults.filter(
+                  (r): r is NonNullable<typeof r> =>
+                    r != null && r.toolName === toolName
+                );
+                for (const r of results) {
+                  const msgId = generateUUID();
+                  const summary = summarizeAgentOutputForChat(r.output);
+                  const payload = JSON.stringify(summary, null, 2);
+                  dataStream.write({ type: "text-start", id: msgId });
+                  dataStream.write({
+                    type: "text-delta",
+                    id: msgId,
+                    delta: `\n\n---\n\n**[debug] ${toolName} output**\n\n\`\`\`json\n${payload}\n\`\`\`\n`,
+                  });
+                  dataStream.write({ type: "text-end", id: msgId });
+                }
+              }
+            }
+          },
+          // Finance mode: has finance tools
+          // Project/Custom/Email modes: no tools, just LLM with context
+          experimental_activeTools: isFinanceMode
+            ? ["financeQuery", "runFinanceAgent"]
+            : [],
+          experimental_transform: smoothStream({ chunking: "word" }),
+          tools: {
+            financeQuery: financeQuery({ session, projectId: activeProjectId }),
+            runFinanceAgent: tool({
+              description:
+                "Delegate to FinanceAgent for deterministic finance analysis. Returns structured JSON including questions_for_user when clarification is needed.",
+              inputSchema: z.object({
+                question: z.string().min(1).max(4000),
+              }),
+              execute: async ({ question }) => {
+                dataStream.write({
+                  type: "data-agentStatus",
+                  data: {
+                    agent: "Finance Agent",
+                    message: "Consulting Finance Agent...",
+                  },
+                });
+                const result = await runFinanceAgent({
+                  session,
+                  projectId: activeProjectId,
+                  input: { question },
+                });
+                dataStream.write({
+                  type: "data-agentStatus",
+                  data: {
+                    agent: "Finance Agent",
+                    message:
+                      "Received response from Finance Agent, processing...",
+                  },
+                });
+                return result;
+              },
+            }),
+          },
+          experimental_telemetry: {
+            isEnabled: isProductionEnvironment,
+            functionId: "stream-text",
+          },
+          onFinish: async ({ usage }) => {
+            // Clear agent status when stream finishes
+            dataStream.write({
+              type: "data-agentStatus",
+              data: {
+                agent: "",
+                message: "",
+              },
+            });
+            try {
+              const providers = await getTokenlensCatalog();
+              const modelId =
+                myProvider.languageModel(selectedChatModel).modelId;
+              if (!modelId) {
+                finalMergedUsage = usage;
+                dataStream.write({
+                  type: "data-usage",
+                  data: finalMergedUsage,
+                });
+                return;
+              }
+
+              if (!providers) {
+                finalMergedUsage = usage;
+                dataStream.write({
+                  type: "data-usage",
+                  data: finalMergedUsage,
+                });
+                return;
+              }
+
+              const summary = getUsage({ modelId, usage, providers });
+              finalMergedUsage = { ...usage, ...summary, modelId } as AppUsage;
+              dataStream.write({ type: "data-usage", data: finalMergedUsage });
+            } catch (err) {
+              console.warn("TokenLens enrichment failed", err);
+              finalMergedUsage = usage;
+              dataStream.write({ type: "data-usage", data: finalMergedUsage });
+            }
+          },
+        });
+
+        result.consumeStream();
+
+        dataStream.merge(
+          result.toUIMessageStream({
+            sendReasoning: true,
+          })
+        );
+      },
+      generateId: generateUUID,
+      onFinish: async ({ messages }) => {
+        await saveMessages({
+          messages: messages.map((currentMessage) => ({
+            id: currentMessage.id,
+            role: currentMessage.role,
+            parts: currentMessage.parts,
+            createdAt: new Date(),
+            attachments: [],
+            chatId: id,
+          })),
+        });
+
+        if (finalMergedUsage) {
+          try {
+            await updateChatLastContextById({
+              chatId: id,
+              context: finalMergedUsage,
+            });
+            const usage = finalMergedUsage as Record<string, unknown>;
+            const promptTokens =
+              typeof usage.promptTokens === "number"
+                ? usage.promptTokens
+                : typeof usage.inputTokens === "number"
+                  ? usage.inputTokens
+                  : undefined;
+            const completionTokens =
+              typeof usage.completionTokens === "number"
+                ? usage.completionTokens
+                : typeof usage.outputTokens === "number"
+                  ? usage.outputTokens
+                  : undefined;
+            await insertUsageLog({
+              userId: session.user.id,
+              chatId: id,
+              promptTokens,
+              completionTokens,
+            });
+          } catch (err) {
+            console.warn("Unable to persist last usage for chat", id, err);
+          }
+        }
+      },
+      onError: () => {
+        return "Oops, an error occurred!";
+      },
+    });
+
+    // const streamContext = getStreamContext();
+
+    // if (streamContext) {
+    //   return new Response(
+    //     await streamContext.resumableStream(streamId, () =>
+    //       stream.pipeThrough(new JsonToSseTransformStream())
+    //     )
+    //   );
+    // }
+
+    return new Response(stream.pipeThrough(new JsonToSseTransformStream()));
+  } catch (error) {
+    const vercelId = request.headers.get("x-vercel-id");
+
+    if (error instanceof ChatSDKError) {
+      return error.toResponse();
+    }
+
+    // Check for Vercel AI Gateway credit card error
+    if (
+      error instanceof Error &&
+      error.message?.includes(
+        "AI Gateway requires a valid credit card on file to service requests"
+      )
+    ) {
+      return new ChatSDKError("bad_request:activate_gateway").toResponse();
+    }
+
+    console.error("Unhandled error in chat API:", error, { vercelId });
+    return new ChatSDKError("offline:chat").toResponse();
+  }
+}
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+
+  if (!id) {
+    return new ChatSDKError("bad_request:api").toResponse();
+  }
+
+  const session = await auth();
+
+  if (!session?.user) {
+    return new ChatSDKError("unauthorized:chat").toResponse();
+  }
+
+  const chat = await getChatById({ id });
+
+  if (chat?.userId !== session.user.id) {
+    return new ChatSDKError("forbidden:chat").toResponse();
+  }
+
+  const deletedChat = await deleteChatById({ id });
+
+  return Response.json(deletedChat, { status: 200 });
+}
