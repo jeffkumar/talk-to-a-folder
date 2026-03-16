@@ -96,13 +96,6 @@ export function ProjectDetails({
     typeof projectName === "string" &&
     projectName.trim().toLowerCase() === "default";
 
-  const slackNamespace = selectedProject?.id
-    ? namespacesForSourceTypes(
-        ["slack"],
-        selectedProject.id,
-        selectedProject.isDefault
-      )[0]
-    : "—";
   const docsNamespace = selectedProject?.id
     ? namespacesForSourceTypes(
         ["docs"],
@@ -315,21 +308,6 @@ export function ProjectDetails({
               <span className="block">
                 {formatProjectDate(selectedProject?.createdAt)}
               </span>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-muted-foreground text-xs uppercase tracking-wide">
-                Slack Namespace
-              </span>
-              {slackNamespace !== "—" ? (
-                <ValueWithTooltip
-                  className="block break-all font-mono text-xs"
-                  displayValue={slackNamespace}
-                  fullValue={slackNamespace}
-                />
-              ) : (
-                <span className="block font-mono text-xs">—</span>
-              )}
             </div>
 
             <div className="space-y-1">

@@ -198,7 +198,7 @@ export async function DELETE(
 
     // 2. Delete Turbopuffer namespaces
     const namespaces = namespacesForSourceTypes(
-      ["docs", "slack"],
+      ["docs"],
       project.id,
       project.isDefault
     );

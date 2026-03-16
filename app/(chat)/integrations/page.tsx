@@ -4,7 +4,7 @@ import { auth } from "@/app/(auth)/auth";
 import { GoogleIntegrationCard } from "@/components/integrations/google-integration-card";
 import { IntegrationsHeader } from "@/components/integrations/integrations-header";
 import { MicrosoftIntegrationCard } from "@/components/integrations/microsoft-integration-card";
-import { SlackRetrievalToggle } from "@/components/integrations/slack-retrieval-toggle";
+import { ENABLE_MICROSOFT_INTEGRATION } from "@/lib/constants";
 
 export default function Page() {
   return (
@@ -34,10 +34,8 @@ async function IntegrationsPage() {
 
         <div className="mt-6 space-y-4">
           <GoogleIntegrationCard />
-          <MicrosoftIntegrationCard />
+          {ENABLE_MICROSOFT_INTEGRATION && <MicrosoftIntegrationCard />}
         </div>
-
-        <SlackRetrievalToggle />
       </div>
     </>
   );

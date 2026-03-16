@@ -120,7 +120,7 @@ export function RemixSheet({
   }>(
     selectedProjectId && open
       ? docType === "notes"
-        ? `/api/projects/${selectedProjectId}/notes`
+        ? `/api/projects/${selectedProjectId}/docs?type=note`
         : `/api/projects/${selectedProjectId}/docs`
       : null,
     fetcher
@@ -319,7 +319,7 @@ export function RemixSheet({
           ? [{ name: "build-plans", color: "#f59e0b" }]
           : undefined;
 
-      const response = await fetch(`/api/projects/${selectedProjectId}/notes`, {
+      const response = await fetch(`/api/projects/${selectedProjectId}/docs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -336,7 +336,7 @@ export function RemixSheet({
 
       toast.success("Saved as note");
       // Refresh notes list
-      void mutate(`/api/projects/${selectedProjectId}/notes`);
+      void mutate(`/api/projects/${selectedProjectId}/docs?type=note`);
     } catch (error) {
       console.error("Failed to save note:", error);
       toast.error(

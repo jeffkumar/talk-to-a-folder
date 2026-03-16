@@ -454,12 +454,7 @@ const PurePreviewMessage = ({
               <div className="flex flex-wrap gap-2">
                 {citationSources.map((source, i) => {
                   const citationNumber = i + 1;
-                  const baseTitle =
-                    source.sourceType === "slack"
-                      ? source.channelName
-                        ? `#${source.channelName}`
-                        : "Slack"
-                      : (source.filename ?? "Source");
+                  const baseTitle = source.filename ?? "Source";
                   const href = source.blobUrl;
                   const title = baseTitle;
                   const displayLabel = shouldEnumerateCitations

@@ -15,6 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import useSWR from "swr";
 import { GoogleDriveIcon, OneDriveIcon } from "@/components/icons";
+import { ENABLE_MICROSOFT_INTEGRATION } from "@/lib/constants";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -96,7 +97,7 @@ export function ViewDocs({
   );
 
   const { data: msStatus } = useSWR<MicrosoftStatus>(
-    "/api/integrations/microsoft/status",
+    ENABLE_MICROSOFT_INTEGRATION ? "/api/integrations/microsoft/status" : null,
     fetcher
   );
 
@@ -367,9 +368,10 @@ export function ViewDocs({
                       : "";
                   const sourceLower = sourceWebUrl.toLowerCase();
                   const isMicrosoftSource =
-                    Boolean(driveId && itemId) ||
-                    sourceLower.includes("sharepoint.com") ||
-                    sourceLower.includes("onedrive");
+                    ENABLE_MICROSOFT_INTEGRATION &&
+                    (Boolean(driveId && itemId) ||
+                      sourceLower.includes("sharepoint.com") ||
+                      sourceLower.includes("onedrive"));
                   const googleFileId =
                     metadata && typeof metadata.googleFileId === "string"
                       ? metadata.googleFileId
@@ -662,9 +664,10 @@ export function ViewDocs({
                   : "";
               const sourceLower = sourceWebUrl.toLowerCase();
               const isMicrosoftSource =
-                Boolean(driveId && itemId) ||
-                sourceLower.includes("sharepoint.com") ||
-                sourceLower.includes("onedrive");
+                ENABLE_MICROSOFT_INTEGRATION &&
+                (Boolean(driveId && itemId) ||
+                  sourceLower.includes("sharepoint.com") ||
+                  sourceLower.includes("onedrive"));
               const googleFileId =
                 metadata && typeof metadata.googleFileId === "string"
                   ? metadata.googleFileId
@@ -721,9 +724,10 @@ export function ViewDocs({
                     : "";
                 const sourceLower = sourceWebUrl.toLowerCase();
                 const isMicrosoftSource =
-                  Boolean(driveId && itemId) ||
-                  sourceLower.includes("sharepoint.com") ||
-                  sourceLower.includes("onedrive");
+                  ENABLE_MICROSOFT_INTEGRATION &&
+                  (Boolean(driveId && itemId) ||
+                    sourceLower.includes("sharepoint.com") ||
+                    sourceLower.includes("onedrive"));
                 const googleFileId =
                   metadata && typeof metadata.googleFileId === "string"
                     ? metadata.googleFileId

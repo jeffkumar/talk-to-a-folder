@@ -237,19 +237,6 @@ function stripMarkdownTables(text: string): string {
     .trim();
 }
 
-function isSlackContextAllowedForSessionEmail(
-  sessionEmail: string | null
-): boolean {
-  const allowlist = parseCsvEnv(process.env.SLACK_CONTEXT_ALLOWLIST_EMAILS).map(
-    (e) => e.toLowerCase()
-  );
-  if (allowlist.length === 0) return false;
-  if (!sessionEmail) return false;
-  const normalized = sessionEmail.trim().toLowerCase();
-  if (!normalized) return false;
-  return allowlist.includes(normalized);
-}
-
 function getRetrievalTimeFilterModeInfoForProject(
   projectId: string | undefined
 ): {
@@ -737,48 +724,6 @@ function timestampMsFromRow(row: unknown): number | null {
   return null;
 }
 
-function extractLastMentionName(text: string): string | null {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  const match =
-    normalized.match(
-      /\bwhat did\s+(.+?)\s+last\s+(mention|say|talk about)\b/i
-    ) ??
-    normalized.match(
-      /\bwhat was\s+the last thing\s+(.+?)\s+(mentioned|said)\b/i
-    );
-  const raw = match?.[1]?.trim();
-  if (!raw) return null;
-  // Strip trailing punctuation and common filler.
-  const cleaned = raw.replace(/[?.!,;:]+$/g, "").trim();
-  if (!cleaned) return null;
-  return cleaned;
-}
-
-function formatNewestSlackMatch({
-  name,
-  row,
-  tsMs,
-}: {
-  name: string;
-  row: Record<string, unknown>;
-  tsMs: number;
-}): string {
-  const userName = typeof row.user_name === "string" ? row.user_name : name;
-  const channelName =
-    typeof row.channel_name === "string" ? row.channel_name : "";
-  const url = typeof row.url === "string" ? row.url : "";
-  const content = typeof row.content === "string" ? row.content : "";
-  const iso = new Date(tsMs).toISOString();
-  const headerParts = [
-    "Most recent Slack message (in retrieved set)",
-    userName ? `author=${userName}` : "",
-    channelName ? `channel=#${channelName}` : "",
-    `at=${iso}`,
-    url ? `url=${url}` : "",
-  ].filter((p) => p.length > 0);
-  return `${headerParts.join(" · ")}\n${content}`;
-}
-
 const getTokenlensCatalog = cache(
   async (): Promise<ModelCatalog | undefined> => {
     try {
@@ -848,7 +793,7 @@ export async function POST(request: Request) {
       selectedVisibilityType: VisibilityType;
       selectedAgentMode?: string; // "project", "finance", or custom agent UUID
       projectId?: string;
-      sourceTypes?: Array<"slack" | "docs">;
+      sourceTypes?: Array<"docs">;
       ignoredDocIds?: string[];
       targetDocIds?: string[];
       retrievalRangePreset?: RetrievalRangePreset;
@@ -885,9 +830,6 @@ export async function POST(request: Request) {
     }
 
     const userType: UserType = session.user.type;
-    const slackContextAllowed = isSlackContextAllowedForSessionEmail(
-      typeof session.user.email === "string" ? session.user.email : null
-    );
 
     // Get user's first name (from profile or extract from email)
     const getUserFirstName = (): string => {
@@ -1203,21 +1145,7 @@ export async function POST(request: Request) {
               ? requestedPreset
               : "all";
 
-        const requestedSourceTypes = (
-          Array.isArray(sourceTypes) ? sourceTypes : undefined
-        ) as SourceType[] | undefined;
-        const allowedSourceTypes = (() => {
-          // Files mode: only docs, no slack
-          if (isFilesMode) return ["docs"] satisfies SourceType[];
-          if (slackContextAllowed) return requestedSourceTypes;
-          if (requestedSourceTypes) {
-            return requestedSourceTypes.filter((t) => t !== "slack");
-          }
-          return ["docs"] satisfies SourceType[];
-        })();
-        const effectiveSourceTypes = docLockFilenameHint
-          ? (["docs"] satisfies SourceType[])
-          : allowedSourceTypes;
+        const effectiveSourceTypes = ["docs"] satisfies SourceType[];
         const namespaces = namespacesForSourceTypes(
           effectiveSourceTypes,
           activeProjectId,
@@ -1470,45 +1398,7 @@ export async function POST(request: Request) {
         }
 
         const filteredRows = cappedRows.slice(0, isAggregationQuery ? 120 : 24);
-        let usedRows = filteredRows.slice(0, isAggregationQuery ? 40 : 8);
-
-        const lastMentionName = extractLastMentionName(userText);
-        if (lastMentionName) {
-          const needle = lastMentionName.toLowerCase();
-          let bestRow: Record<string, unknown> | null = null;
-          let bestTsMs = -1;
-
-          for (const row of timeFilteredRows) {
-            const r = row as Record<string, unknown>;
-            const sourceType =
-              typeof r.sourceType === "string" ? r.sourceType : "";
-            if (sourceType !== "slack") continue;
-
-            const userName = typeof r.user_name === "string" ? r.user_name : "";
-            const userEmail =
-              typeof r.user_email === "string" ? r.user_email : "";
-            const matchesName =
-              (userName && userName.toLowerCase().includes(needle)) ||
-              (userEmail && userEmail.toLowerCase().includes(needle));
-            if (!matchesName) continue;
-
-            const tsMs = timestampMsFromRow(r);
-            if (tsMs === null) continue;
-            if (tsMs > bestTsMs) {
-              bestTsMs = tsMs;
-              bestRow = r;
-            }
-          }
-
-          if (bestRow && bestTsMs > 0) {
-            usedRows = [bestRow as any];
-            retrievedContext = formatNewestSlackMatch({
-              name: lastMentionName,
-              row: bestRow,
-              tsMs: bestTsMs,
-            });
-          }
-        }
+        const usedRows = filteredRows.slice(0, isAggregationQuery ? 40 : 8);
 
         sources = usedRows;
         // Debug logging: summarize retrieval results without dumping large payloads
@@ -1613,18 +1503,6 @@ export async function POST(request: Request) {
                       ? (r as any).sourceCreatedAtMs
                       : null,
                 ts: typeof (r as any).ts === "string" ? (r as any).ts : null,
-                channelName:
-                  typeof (r as any).channel_name === "string"
-                    ? (r as any).channel_name
-                    : null,
-                userName:
-                  typeof (r as any).user_name === "string"
-                    ? (r as any).user_name
-                    : null,
-                userEmail:
-                  typeof (r as any).user_email === "string"
-                    ? (r as any).user_email
-                    : null,
                 row: summarizeRow(r),
               })),
             });
@@ -1642,15 +1520,7 @@ export async function POST(request: Request) {
                   typeof (row as any).filename === "string"
                     ? (row as any).filename
                     : "";
-                const channel =
-                  typeof (row as any).channel_name === "string"
-                    ? (row as any).channel_name
-                    : "";
-                const header = filename
-                  ? filename
-                  : channel
-                    ? `#${channel}`
-                    : `result ${index + 1}`;
+                const header = filename || `result ${index + 1}`;
                 const truncated =
                   content.length > 700 ? `${content.slice(0, 700)}…` : content;
                 return `${header}\n${truncated}`;
@@ -1728,19 +1598,11 @@ export async function POST(request: Request) {
               typeof (s as any).source_url === "string"
                 ? (s as any).source_url
                 : "";
-            const slackUrl =
-              typeof (s as any).url === "string" ? (s as any).url : "";
-            const channelName =
-              typeof (s as any).channel_name === "string"
-                ? (s as any).channel_name
-                : "";
             const preferredUrl =
               sourceType === "docs" &&
               sourceUrl.toLowerCase().includes("sharepoint.com")
                 ? sourceUrl
-                : sourceType === "slack" && slackUrl
-                  ? slackUrl
-                  : blobUrl || sourceUrl;
+                : blobUrl || sourceUrl;
             const filename = typeof s.filename === "string" ? s.filename : "";
             const category =
               typeof (s as any).doc_category === "string"
@@ -1769,7 +1631,6 @@ export async function POST(request: Request) {
               sourceType,
               docId: docId || undefined,
               filename: filename || undefined,
-              channelName: channelName || undefined,
               category: category || undefined,
               description: description || undefined,
               documentType:
@@ -1788,9 +1649,6 @@ export async function POST(request: Request) {
             .slice(0, 20)
             .map((s, idx) => {
               const label =
-                (s.sourceType === "slack" && s.channelName
-                  ? `#${s.channelName}`
-                  : null) ??
                 s.filename ??
                 (typeof s.blobUrl === "string" && s.blobUrl.length > 0
                   ? s.blobUrl

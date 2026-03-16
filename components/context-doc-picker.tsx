@@ -45,7 +45,7 @@ export function ContextDocPicker({
   const [filterLabelName, setFilterLabelName] = useState<string | null>(null);
 
   const { data: notesData } = useSWR<{ notes?: ProjectDoc[] }>(
-    selectedProjectId ? `/api/projects/${selectedProjectId}/notes` : null,
+    selectedProjectId ? `/api/projects/${selectedProjectId}/docs?type=note` : null,
     fetcher
   );
 

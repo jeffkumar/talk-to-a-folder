@@ -21,6 +21,8 @@ export const DUMMY_PASSWORD = generateDummyPassword();
 export const preventDuplicateProjectDocFilenames =
   process.env.PREVENT_DUPLICATE_PROJECT_DOC_FILENAMES !== "false";
 
+export const ENABLE_MICROSOFT_INTEGRATION = false;
+
 /**
  * Maximum number of users in the pilot program.
  * Users beyond this limit are placed on a waitlist.

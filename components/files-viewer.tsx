@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useProjectSelector } from "@/hooks/use-project-selector";
 import { useUploadNotifications } from "@/hooks/use-upload-notifications";
+import { ENABLE_MICROSOFT_INTEGRATION } from "@/lib/constants";
 import type { ProjectDoc } from "@/lib/db/schema";
 import {
   cn,
@@ -114,6 +115,7 @@ function formatDocType(value: string): string {
 }
 
 function isMicrosoftSourceDoc(doc: ProjectDoc): boolean {
+  if (!ENABLE_MICROSOFT_INTEGRATION) return false;
   const metadata =
     doc.metadata && typeof doc.metadata === "object"
       ? (doc.metadata as Record<string, unknown>)
@@ -201,7 +203,7 @@ export function FilesViewer() {
   );
 
   const { data: msStatus } = useSWR<MicrosoftStatus>(
-    "/api/integrations/microsoft/status",
+    ENABLE_MICROSOFT_INTEGRATION ? "/api/integrations/microsoft/status" : null,
     fetcher
   );
 
@@ -627,7 +629,9 @@ export function FilesViewer() {
             <SelectContent>
               <SelectItem value="all">All Sources</SelectItem>
               <SelectItem value="google">Google Drive</SelectItem>
-              <SelectItem value="microsoft">Microsoft</SelectItem>
+              {ENABLE_MICROSOFT_INTEGRATION && (
+                <SelectItem value="microsoft">Microsoft</SelectItem>
+              )}
               <SelectItem value="uploaded">Uploaded</SelectItem>
             </SelectContent>
           </Select>

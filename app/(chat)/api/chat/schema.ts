@@ -39,7 +39,7 @@ export const postRequestBodySchema = z.object({
   selectedVisibilityType: z.enum(["public", "private"]),
   selectedAgentMode: z.string().optional(), // "project", "finance", or custom agent UUID
   projectId: z.string().uuid().optional(),
-  sourceTypes: z.array(z.enum(["slack", "docs"])).optional(),
+  sourceTypes: z.array(z.enum(["docs"])).optional(),
   ignoredDocIds: z.array(z.string()).optional(),
   targetDocIds: z.array(z.string()).optional(),
   retrievalRangePreset: z.enum(["all", "1d", "7d", "30d", "90d"]).optional(),

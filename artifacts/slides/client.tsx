@@ -132,7 +132,7 @@ export const slidesArtifact = new Artifact<"slides", Metadata>({
         const jsonContent = JSON.stringify(slidesData);
 
         try {
-          const response = await fetch(`/api/projects/${projectId}/notes`, {
+          const response = await fetch(`/api/projects/${projectId}/docs`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ title, content: jsonContent }),

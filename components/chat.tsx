@@ -52,7 +52,6 @@ import { useArtifactSelector } from "@/hooks/use-artifact";
 import { useAutoResume } from "@/hooks/use-auto-resume";
 import { useChatVisibility } from "@/hooks/use-chat-visibility";
 import { useProjectSelector } from "@/hooks/use-project-selector";
-import { useRetrievalSettings } from "@/hooks/use-retrieval-settings";
 import { type AgentMode, DEFAULT_AGENT_MODE } from "@/lib/ai/models";
 import type { ProjectDoc, Vote } from "@/lib/db/schema";
 import { ChatSDKError } from "@/lib/errors";
@@ -190,9 +189,6 @@ function BusinessNameTypeahead({
   );
 }
 
-function getSourceTypes(includeSlack: boolean): Array<"slack" | "docs"> {
-  return includeSlack ? ["slack", "docs"] : ["docs"];
-}
 
 export function Chat({
   id,
@@ -264,13 +260,6 @@ export function Chat({
     }
   }, [chatProjectId, selectedProjectId, projects, setSelectedProjectId]);
 
-  const { includeSlack, retrievalRangePreset } = useRetrievalSettings();
-  const sourceTypes = getSourceTypes(includeSlack);
-  const sourceTypesRef = useRef(sourceTypes);
-  const retrievalRangePresetRef = useRef(retrievalRangePreset);
-
-  // Keep refs in sync during render so a quick toggle + send doesn't use stale values.
-  sourceTypesRef.current = sourceTypes;
 
   const browserTimeZone =
     typeof Intl !== "undefined"
@@ -356,14 +345,12 @@ export function Chat({
             selectedChatModel: currentModelIdRef.current,
             selectedVisibilityType: visibilityType,
             selectedAgentMode: currentAgentModeRef.current,
-            sourceTypes: sourceTypesRef.current,
             projectId: selectedProjectIdRef.current,
             ignoredDocIds: ignoredDocIdsRef.current,
             targetDocIds:
               targetDocIdsRef.current.length > 0
                 ? targetDocIdsRef.current
                 : undefined,
-            retrievalRangePreset: retrievalRangePresetRef.current,
             retrievalTimeZone: browserTimeZoneRef.current,
             selectedEntities: selectedEntitiesRef.current,
             selectedTimeRange: selectedTimeRangeRef.current ?? undefined,
@@ -570,10 +557,6 @@ export function Chat({
   useEffect(() => {
     selectedProjectIdRef.current = selectedProjectId;
   }, [selectedProjectId]);
-
-  useEffect(() => {
-    retrievalRangePresetRef.current = retrievalRangePreset;
-  }, [retrievalRangePreset]);
 
   useEffect(() => {
     browserTimeZoneRef.current = browserTimeZone;

@@ -21,6 +21,7 @@ import { ProjectSwitcher } from "@/components/project-switcher";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Button } from "@/components/ui/button";
 import { useProjectSelector } from "@/hooks/use-project-selector";
+import { ENABLE_MICROSOFT_INTEGRATION } from "@/lib/constants";
 import type { ProjectDoc } from "@/lib/db/schema";
 import { cn, fetcher } from "@/lib/utils";
 
@@ -238,7 +239,7 @@ export function EditableDoc({ docId }: { docId: string }) {
           )}
 
           {/* Open in SharePoint link */}
-          {sourceWebUrl && (
+          {ENABLE_MICROSOFT_INTEGRATION && sourceWebUrl && (
             <Button asChild size="sm" variant="ghost">
               <a
                 className="gap-1"

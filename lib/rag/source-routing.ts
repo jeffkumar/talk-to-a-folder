@@ -1,6 +1,4 @@
-import { useGlobalSlack } from "@/lib/env";
-
-export type SourceType = "slack" | "docs" | "tasks";
+export type SourceType = "docs" | "tasks";
 
 export function namespacesForSourceTypes(
   sourceTypes: SourceType[] | undefined,
@@ -10,13 +8,8 @@ export function namespacesForSourceTypes(
   const requested =
     Array.isArray(sourceTypes) && sourceTypes.length > 0
       ? sourceTypes
-      : (["slack", "docs"] as const);
+      : (["docs"] as const);
 
-  const slackNs = useGlobalSlack
-    ? "_synergy_slack"
-    : isDefaultProject || !projectId
-      ? "_synergy_slackv2"
-      : `_synergy_${projectId}_slackv2`;
   const docsNs =
     isDefaultProject || !projectId
       ? "_synergy_docsv2"
@@ -29,14 +22,12 @@ export function namespacesForSourceTypes(
   const namespaces: string[] = [];
 
   for (const type of requested) {
-    if (type === "slack") namespaces.push(slackNs);
     if (type === "docs") namespaces.push(docsNs);
     if (type === "tasks") namespaces.push(tasksNs);
   }
 
-  // Default behavior if no specific types requested
   if (namespaces.length === 0) {
-    return [slackNs, docsNs];
+    return [docsNs];
   }
 
   return namespaces;
@@ -45,8 +36,6 @@ export function namespacesForSourceTypes(
 export function inferSourceTypeFromNamespace(
   namespace: string
 ): SourceType | null {
-  if (namespace.endsWith("_slack") || namespace.endsWith("_slackv2"))
-    return "slack";
   if (namespace.endsWith("_docs") || namespace.endsWith("_docsv2"))
     return "docs";
   if (namespace.endsWith("_tasksv1")) return "tasks";
