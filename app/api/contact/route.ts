@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { sendContactRequestEmail } from "@/lib/email";
+import { ChatSDKError } from "@/lib/errors";
 
 const MAX_NAME = 200;
 const MAX_EMAIL = 320;
@@ -14,35 +14,34 @@ export async function POST(request: Request) {
       typeof body.message === "string" ? body.message.trim() : "";
 
     if (!name || name.length > MAX_NAME) {
-      return NextResponse.json(
-        { error: "Name is required and must be under 200 characters." },
-        { status: 400 }
-      );
+      return new ChatSDKError(
+        "bad_request:contact",
+        "Name is required and must be under 200 characters."
+      ).toResponse();
     }
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email) || email.length > MAX_EMAIL) {
-      return NextResponse.json(
-        { error: "Valid email is required." },
-        { status: 400 }
-      );
+      return new ChatSDKError(
+        "bad_request:contact",
+        "Valid email is required."
+      ).toResponse();
     }
+
     if (!message || message.length > MAX_MESSAGE) {
-      return NextResponse.json(
-        { error: "Message is required and must be under 5000 characters." },
-        { status: 400 }
-      );
+      return new ChatSDKError(
+        "bad_request:contact",
+        "Message is required and must be under 5000 characters."
+      ).toResponse();
     }
 
     await sendContactRequestEmail({ name, email, message });
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("Contact API error:", err);
-    return NextResponse.json(
-      {
-        error:
-          "Failed to send your message. Please try again or email us directly.",
-      },
-      { status: 500 }
-    );
+    return Response.json({ success: true });
+  } catch (error) {
+    if (error instanceof ChatSDKError) {
+      return error.toResponse();
+    }
+    console.error("Contact API error:", error);
+    return new ChatSDKError("offline:contact").toResponse();
   }
 }

@@ -16,7 +16,8 @@ export type Surface =
   | "vote"
   | "document"
   | "suggestions"
-  | "activate_gateway";
+  | "activate_gateway"
+  | "contact";
 
 export type ErrorCode = `${ErrorType}:${Surface}`;
 
@@ -33,6 +34,7 @@ export const visibilityBySurface: Record<Surface, ErrorVisibility> = {
   document: "response",
   suggestions: "response",
   activate_gateway: "response",
+  contact: "response",
 };
 
 export class ChatSDKError extends Error {
@@ -131,6 +133,11 @@ export function getMessageByErrorCode(errorCode: ErrorCode): string {
       return "You need to sign in to view this document. Please sign in and try again.";
     case "bad_request:document":
       return "The request to create or update the document was invalid. Please check your input and try again.";
+
+    case "bad_request:contact":
+      return "Please check your contact form input and try again.";
+    case "offline:contact":
+      return "Failed to send your message. Please try again or email us directly.";
 
     default:
       return "Something went wrong. Please try again later.";

@@ -188,6 +188,19 @@ For Google OAuth in production, update:
 - `GOOGLE_REDIRECT_URI` to your production callback URL
 - Authorized origins/redirects in Google Cloud Console
 
+## Code Quality
+
+This project follows production-quality standards including:
+
+- **Linting**: Biome via Ultracite with strict TypeScript
+- **Error Handling**: Structured `ChatSDKError` with typed error codes
+- **Rate Limiting**: Per-user message limits with proper 429 responses
+- **Retry Logic**: Exponential backoff for external API calls
+- **Git Hooks**: Pre-commit linting, pre-push build checks
+- **CI**: GitHub Actions lint on every push
+
+See [QUALITY.md](QUALITY.md) for the full code quality assessment.
+
 ## Tech Stack
 
 - **Framework**: [Next.js](https://nextjs.org) with App Router
