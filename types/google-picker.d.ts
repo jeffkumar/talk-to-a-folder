@@ -18,9 +18,9 @@ type Gapi = {
   ): void;
 };
 
-type Window = {
+interface Window {
   gapi?: Gapi;
-};
+}
 
 declare namespace google.picker {
   const Action: {

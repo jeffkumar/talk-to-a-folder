@@ -60,7 +60,10 @@
         "useCollapsedIf": "off",
 
         /* CSS specificity is handled separately */
-        "noDescendingSpecificity": "off"
+        "noDescendingSpecificity": "off",
+
+        /* Conflicts with TypeScript type inference - .at() returns T | undefined */
+        "useAtIndex": "off"
       },
       "nursery": {
         /* Too many false positives */
@@ -73,7 +76,10 @@
         "useImageSize": "off",
 
         /* Max params is stylistic */
-        "useMaxParams": "off"
+        "useMaxParams": "off",
+
+        /* Interface needed for declaration merging */
+        "useConsistentTypeDefinitions": "off"
       },
       "complexity": {
         /* Needs more work to fix */

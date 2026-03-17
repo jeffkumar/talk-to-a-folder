@@ -152,7 +152,7 @@ function inferDateRange(
   months.sort((a, b) => a - b);
   if (months.length >= 2) {
     const startM = months[0];
-    const endM = months.at(-1);
+    const endM = months.at(-1) as number;
     const start = toYmd(year, startM, 1);
     const endYear = endM === 12 ? year + 1 : year;
     const endMonth = endM === 12 ? 1 : endM + 1;
