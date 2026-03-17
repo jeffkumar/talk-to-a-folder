@@ -989,33 +989,28 @@ export async function POST(request: Request) {
 
     // Resolve Google Drive folder links in the user message to targetDocIds
     let effectiveTargetDocIds = targetDocIds;
-    let folderNotSynced = false;
     if (activeProjectId && userText) {
       const folderIds = extractDriveFolderIds(userText);
       if (folderIds.length > 0) {
         const resolvedDocIds: string[] = [
           ...(effectiveTargetDocIds ?? []),
         ];
-        let anyFound = false;
         for (const folderId of folderIds) {
           const docs = await getProjectDocsByGoogleParentId({
             projectId: activeProjectId,
             googleParentId: folderId,
           });
-          if (docs.length > 0) {
-            anyFound = true;
-            for (const doc of docs) {
-              if (!resolvedDocIds.includes(doc.id)) {
-                resolvedDocIds.push(doc.id);
-              }
+          for (const doc of docs) {
+            if (!resolvedDocIds.includes(doc.id)) {
+              resolvedDocIds.push(doc.id);
             }
           }
         }
-        if (anyFound) {
+        if (resolvedDocIds.length > 0) {
           effectiveTargetDocIds = resolvedDocIds;
-        } else {
-          folderNotSynced = true;
         }
+        // If no docs found with matching googleParentIds, let semantic search
+        // handle it - documents may exist but were uploaded manually
       }
     }
 
@@ -1717,10 +1712,7 @@ Rules:
                 ? `You are Flowchat in Finance Mode.\n\nYou answer questions about financial data from uploaded bank statements, credit card statements, and invoices.\n\nYou have access to the runFinanceAgent tool for querying financial data.\n\nRules:\n- CRITICAL: For finance, totals, or data analysis, you MUST call runFinanceAgent. Do not attempt to answer from memory or background context alone.\n- Use runFinanceAgent for any totals/sums/counts/aggregations.\n- If you need both a total and a breakdown (e.g. "by month"), ensure you ask the specialist for both.\n- When presenting structured numeric results (breakdowns, comparisons, lists), prefer GitHub-flavored markdown tables.\n- If the user asks about a month by name (e.g. "November") but does not specify a year, assume the year is the current year.\n- If the user's message is a follow-up like "break it down" / "by category" / "show me the list" and omits time or entity, infer from the conversation.\n- If entity ambiguity exists (Personal vs one or more businesses), ask a clarifying question before answering.\n- Prefer bank-statement deposits for income-like questions, excluding transfers.\n\n${emailFormattingPrompt}\n\nKeep clarifying questions short and actionable.`
                 : isFilesMode
                   ? `You are a helpful assistant answering questions about files and notes.\n\nYour job is to answer questions based on the uploaded files and notes in this project.\n\nRules:\n- Answer questions directly using the retrieved document context.\n- Quote specific passages when helpful.\n- Reference which documents you used naturally (e.g., "According to [filename]...").\n- Be concise and focused on the user's question.\n- If the context doesn't contain the answer, say so.\n\n${emailFormattingPrompt}`
-                  : `You are Flowchat, your AI assistant for project documentation and collaboration.\n\nYou help teams with:\n- Answering questions about uploaded project documents and files\n- Taking notes and organizing project information\n- Creating slide decks and presentations\n- Drafting emails and communications\n- Generating status updates and reports\n- Tracking tasks and action items\n\nRetrieved context (uploaded docs, notes) is your primary source for answering questions about project content.\n\nRules:\n- Answer questions using the retrieved document context. Quote specific passages when helpful.\n- When presenting structured results (comparisons, lists), prefer GitHub-flavored markdown tables.\n- Reference which documents you used in your answer naturally (e.g., "According to [filename]...").\n- For document Q&A, focus on accuracy and cite specific sections from the documents.\n- Be helpful, concise, and actionable.\n\n${emailFormattingPrompt}`
-                  + (folderNotSynced
-                    ? "\n\nIMPORTANT: The user pasted a Google Drive folder link, but no files from that folder have been synced yet. Let the user know they need to sync files from this folder first via the Integrations page before you can answer questions about its contents."
-                    : "");
+                  : `You are Flowchat, your AI assistant for project documentation and collaboration.\n\nYou help teams with:\n- Answering questions about uploaded project documents and files\n- Taking notes and organizing project information\n- Creating slide decks and presentations\n- Drafting emails and communications\n- Generating status updates and reports\n- Tracking tasks and action items\n\nRetrieved context (uploaded docs, notes) is your primary source for answering questions about project content.\n\nRules:\n- Answer questions using the retrieved document context. Quote specific passages when helpful.\n- When presenting structured results (comparisons, lists), prefer GitHub-flavored markdown tables.\n- Reference which documents you used in your answer naturally (e.g., "According to [filename]...").\n- For document Q&A, focus on accuracy and cite specific sections from the documents.\n- Be helpful, concise, and actionable.\n\n${emailFormattingPrompt}`;
 
         const baseMessages = convertToModelMessages(uiMessages);
 
