@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, FileText, Plus, Sparkles } from "lucide-react";
+import { ArrowRight, FileText, Plus } from "lucide-react";
 import { useState } from "react";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,9 @@ function getMatchingDocumentTypes(
   types: DocumentTypeOption[],
   mimeType: string | null
 ): DocumentTypeOption[] {
-  if (!mimeType) return types;
+  if (!mimeType) {
+    return types;
+  }
   return types.filter((t) => {
     const accepted = t.acceptedMimeTypes ?? [];
     return accepted.length === 0 || accepted.includes(mimeType);

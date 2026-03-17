@@ -26,7 +26,9 @@ function parseScopes(input: string) {
   const safe: string[] = [];
   for (const s of raw) {
     const parsed = Scope.safeParse(s);
-    if (parsed.success) safe.push(parsed.data);
+    if (parsed.success) {
+      safe.push(parsed.data);
+    }
   }
   return safe.length > 0
     ? safe

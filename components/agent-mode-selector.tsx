@@ -1,11 +1,11 @@
 "use client";
 
 import { Bot, FolderOpen, Mail, Plus, TrendingUp } from "lucide-react";
-import { startTransition, useOptimistic, useMemo, useState } from "react";
+import { startTransition, useMemo, useOptimistic, useState } from "react";
 import useSWR from "swr";
 import {
-  CreateAgentModal,
   type AgentInitialValues,
+  CreateAgentModal,
 } from "@/components/create-agent-modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -195,10 +195,7 @@ export function AgentModeSelector({
               setShowCreateModal(true);
             }}
           >
-            <button
-              className="flex w-full items-center gap-2"
-              type="button"
-            >
+            <button className="flex w-full items-center gap-2" type="button">
               <Plus className="size-4 text-muted-foreground" />
               <span className="text-sm">Create Email Agent</span>
             </button>

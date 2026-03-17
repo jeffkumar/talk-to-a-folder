@@ -29,7 +29,9 @@ type SlidesData = {
 };
 
 function isValidSlidesJson(content: string): boolean {
-  if (!content) return false;
+  if (!content) {
+    return false;
+  }
   try {
     const parsed = JSON.parse(content.trim()) as unknown;
     return (
@@ -88,15 +90,21 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { instruction, currentContent, projectId, noteType, replyTo, agentId } =
-      body as {
-        instruction?: string;
-        currentContent?: string;
-        projectId?: string;
-        noteType?: string;
-        replyTo?: boolean;
-        agentId?: string;
-      };
+    const {
+      instruction,
+      currentContent,
+      projectId,
+      noteType,
+      replyTo,
+      agentId,
+    } = body as {
+      instruction?: string;
+      currentContent?: string;
+      projectId?: string;
+      noteType?: string;
+      replyTo?: boolean;
+      agentId?: string;
+    };
 
     if (
       !instruction ||
@@ -109,7 +117,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (instruction.length > 10000) {
+    if (instruction.length > 10_000) {
       return NextResponse.json(
         { error: "Instruction too long (max 10000 characters)" },
         { status: 400 }
@@ -201,9 +209,7 @@ Return ONLY the updated JSON object with the slides array. Do not wrap in code b
             projectId,
             userId: session.user.id,
           });
-          const doc =
-            project &&
-            (await getProjectDocById({ docId: id }));
+          const doc = project && (await getProjectDocById({ docId: id }));
           if (
             doc &&
             doc.projectId === project.id &&

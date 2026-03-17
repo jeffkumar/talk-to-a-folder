@@ -104,7 +104,9 @@ export function ProjectSwitcher({ className }: { className?: string }) {
   };
 
   const handleLeaveProject = async (projectId: string) => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) {
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -246,7 +248,9 @@ export function ProjectSwitcher({ className }: { className?: string }) {
             <AlertDialogAction
               className="bg-destructive hover:bg-destructive/90"
               onClick={() => {
-                if (!removeAction) return;
+                if (!removeAction) {
+                  return;
+                }
                 if (removeAction.isOwnerOrAdmin) {
                   handleDeleteProject(removeAction.projectId);
                 } else {

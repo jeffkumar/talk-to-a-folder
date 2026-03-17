@@ -30,7 +30,7 @@ const BodySchema = z.object({
 });
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   const session = await auth();

@@ -10,7 +10,6 @@ import {
   Sparkles,
   Trash2,
   User,
-  X,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -147,9 +146,15 @@ export function GenerateTasksDialog({
 
   const handleGenerate = async () => {
     // Validate based on input mode
-    if (!selectedProjectId) return;
-    if (inputMode === "documents" && selectedDocIds.size === 0) return;
-    if (inputMode === "paste" && !pastedContent.trim()) return;
+    if (!selectedProjectId) {
+      return;
+    }
+    if (inputMode === "documents" && selectedDocIds.size === 0) {
+      return;
+    }
+    if (inputMode === "paste" && !pastedContent.trim()) {
+      return;
+    }
 
     setIsGenerating(true);
     try {
@@ -204,7 +209,9 @@ export function GenerateTasksDialog({
   };
 
   const handleCreateTasks = async () => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      return;
+    }
 
     const selectedTasks = generatedTasks.filter((t) => t.selected);
     if (selectedTasks.length === 0) {
@@ -231,7 +238,9 @@ export function GenerateTasksDialog({
             assigneeId: globalAssigneeId ?? undefined,
           }),
         }).then((r) => {
-          if (!r.ok) throw new Error("Failed to create task");
+          if (!r.ok) {
+            throw new Error("Failed to create task");
+          }
           return r.json();
         })
       );

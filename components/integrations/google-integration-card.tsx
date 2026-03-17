@@ -208,7 +208,7 @@ export function GoogleIntegrationCard() {
     setPickedFiles([]);
     setInFlightSyncKeys(new Set());
     setDocTypeByKey({});
-  }, [selectedProjectId]);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("invoice_sender_last", invoiceSender);
@@ -277,12 +277,16 @@ export function GoogleIntegrationCard() {
 
   useEffect(() => {
     const docs = syncedDocsData?.docs;
-    if (!Array.isArray(docs) || docs.length === 0) return;
+    if (!Array.isArray(docs) || docs.length === 0) {
+      return;
+    }
     setDocTypeByKey((prev) => {
       const next: Record<string, IngestDocumentType> = { ...prev };
       for (const doc of docs) {
         const key = doc.fileId;
-        if (typeof next[key] === "string") continue;
+        if (typeof next[key] === "string") {
+          continue;
+        }
         const stored = doc.documentType;
         next[key] = stored ?? "general_doc";
       }
@@ -297,7 +301,9 @@ export function GoogleIntegrationCard() {
   >(null);
 
   const handlePickerResult = useCallback((data: GooglePickerCallbackData) => {
-    if (data.action !== "picked" || !data.docs) return;
+    if (data.action !== "picked" || !data.docs) {
+      return;
+    }
     const newFiles = data.docs
       .filter((doc) => isSupportedGoogleFile(doc.name, doc.mimeType))
       .map((doc) => ({
@@ -407,11 +413,15 @@ export function GoogleIntegrationCard() {
 
     const keys = items.map((i) => i.fileId);
     const anyInFlight = keys.some((k) => inFlightSyncKeys.has(k));
-    if (anyInFlight) return;
+    if (anyInFlight) {
+      return;
+    }
 
     setInFlightSyncKeys((prev) => {
       const next = new Set(prev);
-      for (const key of keys) next.add(key);
+      for (const key of keys) {
+        next.add(key);
+      }
       return next;
     });
 
@@ -503,7 +513,9 @@ export function GoogleIntegrationCard() {
     } finally {
       setInFlightSyncKeys((prev) => {
         const next = new Set(prev);
-        for (const key of keys) next.delete(key);
+        for (const key of keys) {
+          next.delete(key);
+        }
         return next;
       });
     }
@@ -539,7 +551,9 @@ export function GoogleIntegrationCard() {
   };
 
   const importAllPicked = () => {
-    if (pickedFiles.length === 0) return;
+    if (pickedFiles.length === 0) {
+      return;
+    }
     for (const file of pickedFiles) {
       const syncKey = file.id;
       const selectedType =
@@ -581,7 +595,9 @@ export function GoogleIntegrationCard() {
                     "/api/integrations/google/disconnect",
                     { method: "DELETE" }
                   );
-                  if (!res.ok) throw new Error("Failed to disconnect");
+                  if (!res.ok) {
+                    throw new Error("Failed to disconnect");
+                  }
                   toast.success("Disconnected from Google");
                   void mutateStatus();
                 } catch (error) {
@@ -859,7 +875,9 @@ export function GoogleIntegrationCard() {
       {/* Invoice Import Dialog */}
       <Dialog
         onOpenChange={(open) => {
-          if (!open) setInvoiceSyncDialog(null);
+          if (!open) {
+            setInvoiceSyncDialog(null);
+          }
         }}
         open={invoiceSyncDialog !== null}
       >
@@ -979,7 +997,9 @@ export function GoogleIntegrationCard() {
             </Button>
             <Button
               onClick={() => {
-                if (!invoiceSyncDialog) return;
+                if (!invoiceSyncDialog) {
+                  return;
+                }
                 const entityName =
                   importEntityKind === "personal"
                     ? "Personal"
@@ -1012,7 +1032,9 @@ export function GoogleIntegrationCard() {
       {/* General Import Dialog */}
       <Dialog
         onOpenChange={(open) => {
-          if (!open) setImportDialog(null);
+          if (!open) {
+            setImportDialog(null);
+          }
         }}
         open={importDialog !== null}
       >
@@ -1084,7 +1106,9 @@ export function GoogleIntegrationCard() {
             </Button>
             <Button
               onClick={() => {
-                if (!importDialog) return;
+                if (!importDialog) {
+                  return;
+                }
                 const entityName =
                   importEntityKind === "personal"
                     ? "Personal"

@@ -77,7 +77,9 @@ export function ShareProjectDialog({
 
   const invite = async () => {
     const trimmed = email.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -108,7 +110,9 @@ export function ShareProjectDialog({
     member: ProjectMemberRow,
     nextRole: "admin" | "member"
   ) => {
-    if (member.kind === "user" && member.role === "owner") return;
+    if (member.kind === "user" && member.role === "owner") {
+      return;
+    }
 
     const memberId = member.kind === "user" ? member.userId : member.email;
     try {
@@ -136,7 +140,9 @@ export function ShareProjectDialog({
   };
 
   const remove = async (member: ProjectMemberRow) => {
-    if (member.kind === "user" && member.role === "owner") return;
+    if (member.kind === "user" && member.role === "owner") {
+      return;
+    }
 
     const memberId = member.kind === "user" ? member.userId : member.email;
     try {

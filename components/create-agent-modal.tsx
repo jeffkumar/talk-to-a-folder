@@ -69,12 +69,16 @@ export function CreateAgentModal({
   };
 
   const handleSave = async () => {
-    if (!selectedProjectId || !formName.trim()) return;
+    if (!selectedProjectId || !formName.trim()) {
+      return;
+    }
 
     setIsSaving(true);
     try {
       const metadata: Record<string, unknown> = {};
-      if (agentType) metadata.agentType = agentType;
+      if (agentType) {
+        metadata.agentType = agentType;
+      }
 
       const response = await fetch(
         `/api/projects/${selectedProjectId}/agents`,
@@ -147,7 +151,9 @@ export function CreateAgentModal({
               className="mt-2"
               id="create-agent-name"
               onChange={(e) => setFormName(e.target.value)}
-              placeholder={agentType === "email" ? "e.g. My Email Style" : "Agent name..."}
+              placeholder={
+                agentType === "email" ? "e.g. My Email Style" : "Agent name..."
+              }
               value={formName}
             />
           </div>
@@ -162,7 +168,11 @@ export function CreateAgentModal({
               className="mt-2"
               id="create-agent-description"
               onChange={(e) => setFormDescription(e.target.value)}
-              placeholder={agentType === "email" ? "e.g. Concise, professional tone" : "Brief description of what this agent does..."}
+              placeholder={
+                agentType === "email"
+                  ? "e.g. Concise, professional tone"
+                  : "Brief description of what this agent does..."
+              }
               value={formDescription}
             />
           </div>
@@ -171,15 +181,19 @@ export function CreateAgentModal({
               className="font-medium text-sm"
               htmlFor="create-agent-prompt"
             >
-              {agentType === "email" ? "Email Rules / System Prompt" : "System Prompt"}
+              {agentType === "email"
+                ? "Email Rules / System Prompt"
+                : "System Prompt"}
             </label>
             <Textarea
               className="mt-2 min-h-[200px] font-mono text-sm"
               id="create-agent-prompt"
               onChange={(e) => setFormSystemPrompt(e.target.value)}
-              placeholder={agentType === "email"
-                ? "Define your email style, tone, and rules..."
-                : "Enter the system prompt for this agent..."}
+              placeholder={
+                agentType === "email"
+                  ? "Define your email style, tone, and rules..."
+                  : "Enter the system prompt for this agent..."
+              }
               value={formSystemPrompt}
             />
             <p className="text-muted-foreground text-xs">
@@ -189,10 +203,10 @@ export function CreateAgentModal({
             </p>
           </div>
           {showUseAsDefault && (
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className="flex cursor-pointer items-center gap-2">
               <input
                 checked={useAsDefault}
-                className="accent-primary size-4"
+                className="size-4 accent-primary"
                 onChange={(e) => setUseAsDefault(e.target.checked)}
                 type="checkbox"
               />

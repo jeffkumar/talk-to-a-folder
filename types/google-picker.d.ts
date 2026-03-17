@@ -1,26 +1,26 @@
-interface GooglePickerDocument {
+type GooglePickerDocument = {
   id: string;
   name: string;
   mimeType: string;
   url: string;
   sizeBytes?: number;
-}
+};
 
-interface GooglePickerCallbackData {
+type GooglePickerCallbackData = {
   action: string;
   docs?: GooglePickerDocument[];
-}
+};
 
-interface Gapi {
+type Gapi = {
   load(
     api: string,
     options: { callback: () => void; onerror?: () => void }
   ): void;
-}
+};
 
-interface Window {
+type Window = {
   gapi?: Gapi;
-}
+};
 
 declare namespace google.picker {
   const Action: {

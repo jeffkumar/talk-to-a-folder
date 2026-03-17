@@ -38,7 +38,9 @@ type SlidesViewerProps = {
  * - Text with JSON: "Here are your slides:\n{"slides": [...]}"
  */
 function extractSlidesJson(text: string): string | null {
-  if (!text) return null;
+  if (!text) {
+    return null;
+  }
 
   // First, try to strip markdown code block wrappers
   let cleaned = text.trim();
@@ -64,7 +66,9 @@ function extractSlidesJson(text: string): string | null {
 
   // Otherwise, look for {"slides": pattern and extract using brace matching
   const startIndex = cleaned.indexOf('{"slides"');
-  if (startIndex === -1) return null;
+  if (startIndex === -1) {
+    return null;
+  }
 
   // Extract JSON object using brace matching
   let braceCount = 0;
@@ -103,7 +107,9 @@ function extractSlidesJson(text: string): string | null {
     }
   }
 
-  if (endIndex === -1) return null;
+  if (endIndex === -1) {
+    return null;
+  }
 
   return cleaned.slice(startIndex, endIndex);
 }

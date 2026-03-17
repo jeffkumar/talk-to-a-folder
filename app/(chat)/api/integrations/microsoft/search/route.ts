@@ -107,7 +107,9 @@ export async function GET(request: Request) {
       .map((hit) => {
         const r = hit.resource;
         // Only return items that have a driveId (needed for import)
-        if (!r.parentReference?.driveId) return null;
+        if (!r.parentReference?.driveId) {
+          return null;
+        }
 
         return {
           id: r.id,

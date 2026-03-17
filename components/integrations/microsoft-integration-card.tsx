@@ -6,12 +6,9 @@ import {
   File as FileIcon,
   Folder,
   History,
-  Info,
   Loader2,
-  Pencil,
   RefreshCw,
   Search,
-  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -19,7 +16,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import useSWR, { useSWRConfig } from "swr";
 import { CreateDocumentTypeModal } from "@/components/create-document-type-modal";
-import { OneDriveIcon, ShareIcon as ShareSourceIcon } from "@/components/icons";
+import { OneDriveIcon } from "@/components/icons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,21 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -68,11 +51,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useProjectSelector } from "@/hooks/use-project-selector";
 import { isSupportedFileName } from "@/lib/constants/file-types";
 import { fetcher, getLocalStorage } from "@/lib/utils";
@@ -102,7 +80,9 @@ type Item = {
 
 // Get MIME type from filename extension
 function getMimeTypeFromFilename(name: string | null): string | null {
-  if (!name) return null;
+  if (!name) {
+    return null;
+  }
   const ext = name.split(".").pop()?.toLowerCase();
   const mimeMap: Record<string, string> = {
     pdf: "application/pdf",
@@ -153,8 +133,10 @@ type WorkflowAgentOption = {
   acceptedMimeTypes?: string[];
 };
 
-function formatDocType(value: IngestDocumentType) {
-  if (value.startsWith("workflow:")) return "Custom type";
+function _formatDocType(value: IngestDocumentType) {
+  if (value.startsWith("workflow:")) {
+    return "Custom type";
+  }
   return "General doc";
 }
 
@@ -162,7 +144,9 @@ function getMatchingWorkflowAgents(
   agents: WorkflowAgentOption[],
   mimeType: string | null
 ): WorkflowAgentOption[] {
-  if (!mimeType) return [];
+  if (!mimeType) {
+    return [];
+  }
   return agents.filter((agent) => {
     const accepted = agent.acceptedMimeTypes ?? [];
     return accepted.includes(mimeType);
@@ -172,7 +156,9 @@ function getMatchingWorkflowAgents(
 const MAX_LABEL_CHARS = 200;
 
 function truncateLabel(value: string, maxChars = MAX_LABEL_CHARS): string {
-  if (value.length <= maxChars) return value;
+  if (value.length <= maxChars) {
+    return value;
+  }
   return `${value.slice(0, maxChars)}…`;
 }
 
@@ -226,7 +212,7 @@ type DisplayStatus =
   | { label: "Failed"; detail?: string; isProcessing: false }
   | { label: "Synced"; detail?: string; isProcessing: false };
 
-function getDisplayStatus({
+function _getDisplayStatus({
   parseStatus,
   isSyncing,
 }: {
@@ -332,7 +318,7 @@ export function MicrosoftIntegrationCard() {
     setInFlightSyncKeys(new Set());
     setSharePointUrl("");
     setDocTypeByKey({});
-  }, [selectedProjectId]);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("invoice_sender_last", invoiceSender);
@@ -396,12 +382,16 @@ export function MicrosoftIntegrationCard() {
 
   useEffect(() => {
     const docs = syncedDocsData?.docs;
-    if (!Array.isArray(docs) || docs.length === 0) return;
+    if (!Array.isArray(docs) || docs.length === 0) {
+      return;
+    }
     setDocTypeByKey((prev) => {
       const next: Record<string, IngestDocumentType> = { ...prev };
       for (const doc of docs) {
         const key = `${doc.driveId}:${doc.itemId}`;
-        if (typeof next[key] === "string") continue;
+        if (typeof next[key] === "string") {
+          continue;
+        }
         const stored = doc.documentType;
         next[key] = stored ?? "general_doc";
       }
@@ -440,7 +430,9 @@ export function MicrosoftIntegrationCard() {
         window.location.origin
       );
       url.searchParams.set("driveId", driveId);
-      if (folderId) url.searchParams.set("itemId", folderId);
+      if (folderId) {
+        url.searchParams.set("itemId", folderId);
+      }
       const res = (await fetcher(url.pathname + url.search)) as {
         items: Item[];
       };
@@ -455,7 +447,9 @@ export function MicrosoftIntegrationCard() {
   };
 
   const performGlobalSearch = async () => {
-    if (!globalSearchQuery.trim()) return;
+    if (!globalSearchQuery.trim()) {
+      return;
+    }
     setIsBusy(true);
     setSearchResults(null);
     try {
@@ -502,7 +496,9 @@ export function MicrosoftIntegrationCard() {
 
     setInFlightSyncKeys((prev) => {
       const next = new Set(prev);
-      for (const key of keys) next.add(key);
+      for (const key of keys) {
+        next.add(key);
+      }
       return next;
     });
 
@@ -633,7 +629,9 @@ export function MicrosoftIntegrationCard() {
     } finally {
       setInFlightSyncKeys((prev) => {
         const next = new Set(prev);
-        for (const key of keys) next.delete(key);
+        for (const key of keys) {
+          next.delete(key);
+        }
         return next;
       });
     }
@@ -1024,22 +1022,22 @@ export function MicrosoftIntegrationCard() {
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           {item.isFolder ? (
-                            <>
-                              <Button
-                                className="shrink-0 whitespace-nowrap"
-                                disabled={isBusy || !item.driveId}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (!item.driveId) return;
-                                  void goToFolder(item.driveId, item.id, label);
-                                }}
-                                size="sm"
-                                type="button"
-                                variant="ghost"
-                              >
-                                Open
-                              </Button>
-                            </>
+                            <Button
+                              className="shrink-0 whitespace-nowrap"
+                              disabled={isBusy || !item.driveId}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!item.driveId) {
+                                  return;
+                                }
+                                void goToFolder(item.driveId, item.id, label);
+                              }}
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              Open
+                            </Button>
                           ) : syncKey ? (
                             <>
                               <Select
@@ -1097,7 +1095,9 @@ export function MicrosoftIntegrationCard() {
                                 }
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (!item.driveId) return;
+                                  if (!item.driveId) {
+                                    return;
+                                  }
                                   const docType = syncKey
                                     ? (syncedDocByKey[syncKey]?.documentType ??
                                       selectedType)
@@ -1261,23 +1261,17 @@ export function MicrosoftIntegrationCard() {
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           {item.isFolder ? (
-                            <>
-                              <Button
-                                className="shrink-0 whitespace-nowrap"
-                                onClick={() =>
-                                  void goToFolder(
-                                    selectedDriveId,
-                                    item.id,
-                                    label
-                                  )
-                                }
-                                size="sm"
-                                type="button"
-                                variant="ghost"
-                              >
-                                Open
-                              </Button>
-                            </>
+                            <Button
+                              className="shrink-0 whitespace-nowrap"
+                              onClick={() =>
+                                void goToFolder(selectedDriveId, item.id, label)
+                              }
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              Open
+                            </Button>
                           ) : (
                             <>
                               <Select
@@ -1409,7 +1403,9 @@ export function MicrosoftIntegrationCard() {
 
       <Dialog
         onOpenChange={(open) => {
-          if (!open) setInvoiceSyncDialog(null);
+          if (!open) {
+            setInvoiceSyncDialog(null);
+          }
         }}
         open={invoiceSyncDialog !== null}
       >
@@ -1529,7 +1525,9 @@ export function MicrosoftIntegrationCard() {
             </Button>
             <Button
               onClick={() => {
-                if (!invoiceSyncDialog) return;
+                if (!invoiceSyncDialog) {
+                  return;
+                }
                 const entityName =
                   importEntityKind === "personal"
                     ? "Personal"
@@ -1562,7 +1560,9 @@ export function MicrosoftIntegrationCard() {
 
       <Dialog
         onOpenChange={(open) => {
-          if (!open) setImportDialog(null);
+          if (!open) {
+            setImportDialog(null);
+          }
         }}
         open={importDialog !== null}
       >
@@ -1634,7 +1634,9 @@ export function MicrosoftIntegrationCard() {
             </Button>
             <Button
               onClick={() => {
-                if (!importDialog) return;
+                if (!importDialog) {
+                  return;
+                }
                 const entityName =
                   importEntityKind === "personal"
                     ? "Personal"

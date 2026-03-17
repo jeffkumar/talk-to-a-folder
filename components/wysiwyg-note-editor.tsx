@@ -110,7 +110,9 @@ function isBlockActive(
   for (let d = $from.depth; d >= 0; d--) {
     const node = $from.node(d);
     if (node.type === type) {
-      if (!attrs) return true;
+      if (!attrs) {
+        return true;
+      }
       return Object.entries(attrs).every(
         ([key, val]) => node.attrs[key] === val
       );
@@ -146,7 +148,9 @@ function setBlockType(
   const { $from, $to } = state.selection;
 
   const range = $from.blockRange($to);
-  if (!range) return;
+  if (!range) {
+    return;
+  }
 
   const tr = state.tr;
 
@@ -176,7 +180,9 @@ function toggleList(view: EditorView, listType: NodeType) {
 
 function insertLink(view: EditorView) {
   const url = window.prompt("Enter URL:");
-  if (!url) return;
+  if (!url) {
+    return;
+  }
 
   const { state, dispatch } = view;
   const { from, to, empty } = state.selection;
@@ -244,7 +250,9 @@ function PureWysiwygNoteEditor({
   onChangeRef.current = onChange;
 
   useEffect(() => {
-    if (!containerRef.current || editorRef.current) return;
+    if (!containerRef.current || editorRef.current) {
+      return;
+    }
 
     const doc = parseMarkdown(content);
 
@@ -276,13 +284,17 @@ function PureWysiwygNoteEditor({
     };
     // Only run on mount/unmount
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [content]);
 
   useEffect(() => {
     const view = editorRef.current;
-    if (!view) return;
+    if (!view) {
+      return;
+    }
 
-    if (content === contentRef.current) return;
+    if (content === contentRef.current) {
+      return;
+    }
     contentRef.current = content;
 
     suppressSync.current = true;
@@ -297,47 +309,65 @@ function PureWysiwygNoteEditor({
   }, [content]);
 
   const handleBold = useCallback(() => {
-    if (!editorRef.current) return;
+    if (!editorRef.current) {
+      return;
+    }
     toggleMark(editorRef.current, documentSchema.marks.strong);
   }, []);
 
   const handleItalic = useCallback(() => {
-    if (!editorRef.current) return;
+    if (!editorRef.current) {
+      return;
+    }
     toggleMark(editorRef.current, documentSchema.marks.em);
   }, []);
 
   const handleHeading1 = useCallback(() => {
-    if (!editorRef.current) return;
+    if (!editorRef.current) {
+      return;
+    }
     setBlockType(editorRef.current, documentSchema.nodes.heading, { level: 1 });
   }, []);
 
   const handleHeading2 = useCallback(() => {
-    if (!editorRef.current) return;
+    if (!editorRef.current) {
+      return;
+    }
     setBlockType(editorRef.current, documentSchema.nodes.heading, { level: 2 });
   }, []);
 
   const handleHeading3 = useCallback(() => {
-    if (!editorRef.current) return;
+    if (!editorRef.current) {
+      return;
+    }
     setBlockType(editorRef.current, documentSchema.nodes.heading, { level: 3 });
   }, []);
 
   const handleBulletList = useCallback(() => {
-    if (!editorRef.current) return;
+    if (!editorRef.current) {
+      return;
+    }
     toggleList(editorRef.current, documentSchema.nodes.bullet_list);
   }, []);
 
   const handleOrderedList = useCallback(() => {
-    if (!editorRef.current) return;
+    if (!editorRef.current) {
+      return;
+    }
     toggleList(editorRef.current, documentSchema.nodes.ordered_list);
   }, []);
 
   const handleLink = useCallback(() => {
-    if (!editorRef.current) return;
+    if (!editorRef.current) {
+      return;
+    }
     insertLink(editorRef.current);
   }, []);
 
   const getMarkActive = (markType: MarkType) => {
-    if (!editorRef.current) return false;
+    if (!editorRef.current) {
+      return false;
+    }
     return isMarkActive(editorRef.current.state, markType);
   };
 
@@ -345,7 +375,9 @@ function PureWysiwygNoteEditor({
     nodeType: NodeType,
     attrs?: Record<string, unknown>
   ) => {
-    if (!editorRef.current) return false;
+    if (!editorRef.current) {
+      return false;
+    }
     return isBlockActive(editorRef.current.state, nodeType, attrs);
   };
 

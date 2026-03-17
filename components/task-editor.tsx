@@ -153,7 +153,9 @@ export function TaskEditor({ taskId }: { taskId: string }) {
   }, [taskData]);
 
   const handleSave = useCallback(async () => {
-    if (!selectedProjectId || isSaving) return;
+    if (!selectedProjectId || isSaving) {
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -201,7 +203,9 @@ export function TaskEditor({ taskId }: { taskId: string }) {
   ]);
 
   const handleDelete = useCallback(async () => {
-    if (!selectedProjectId || isDeleting) return;
+    if (!selectedProjectId || isDeleting) {
+      return;
+    }
 
     setIsDeleting(true);
     try {

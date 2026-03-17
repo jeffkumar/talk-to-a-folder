@@ -18,7 +18,9 @@ type TokenResponse = {
 };
 
 function isExpired(expiresAt: Date | null) {
-  if (!expiresAt) return true;
+  if (!expiresAt) {
+    return true;
+  }
   return expiresAt.getTime() <= Date.now() + 60_000;
 }
 

@@ -1,7 +1,4 @@
-import {
-  isSupportedMimeType as checkSupportedMimeType,
-  GOOGLE_DOCS_MIME_TYPES,
-} from "@/lib/constants/file-types";
+import { isSupportedMimeType as checkSupportedMimeType } from "@/lib/constants/file-types";
 import {
   getIntegrationConnectionForUser,
   upsertIntegrationConnection,
@@ -11,7 +8,9 @@ import { decryptSecret, encryptSecret } from "@/lib/integrations/crypto";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 function isExpired(expiresAt: Date | null): boolean {
-  if (!expiresAt) return true;
+  if (!expiresAt) {
+    return true;
+  }
   // Consider expired if within 5 minutes of expiry
   return expiresAt.getTime() - Date.now() < 5 * 60 * 1000;
 }

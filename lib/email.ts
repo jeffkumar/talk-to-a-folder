@@ -127,8 +127,7 @@ export async function sendProjectInviteEmail(
   }
 }
 
-const CONTACT_TO_EMAIL =
-  process.env.CONTACT_EMAIL ?? "jeff@adventureflow.ai";
+const CONTACT_TO_EMAIL = process.env.CONTACT_EMAIL ?? "jeff@adventureflow.ai";
 
 function escapeHtml(s: string): string {
   return s

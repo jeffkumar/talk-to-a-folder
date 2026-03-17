@@ -27,11 +27,15 @@ export async function saveAgentModeAsCookie(mode: string) {
  * Returns a title if slides data is found, null otherwise.
  */
 function extractTitleFromSlidesJson(text: string): string | null {
-  if (!text) return null;
+  if (!text) {
+    return null;
+  }
 
   // Check if the text contains slides JSON pattern
   const slidesMatch = text.match(/["']?slides["']?\s*:\s*\[/);
-  if (!slidesMatch) return null;
+  if (!slidesMatch) {
+    return null;
+  }
 
   try {
     // Try to find and parse the JSON
@@ -47,11 +51,15 @@ function extractTitleFromSlidesJson(text: string): string | null {
     const startIndex = jsonText.indexOf('{"slides"');
     if (startIndex === -1) {
       const altStartIndex = jsonText.indexOf('{"slides"');
-      if (altStartIndex === -1) return null;
+      if (altStartIndex === -1) {
+        return null;
+      }
     }
 
     const objStart = jsonText.indexOf("{");
-    if (objStart === -1) return null;
+    if (objStart === -1) {
+      return null;
+    }
 
     // Try to parse from that point
     const parsed = JSON.parse(jsonText.slice(objStart));

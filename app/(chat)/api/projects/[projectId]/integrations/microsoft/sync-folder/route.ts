@@ -59,7 +59,9 @@ async function listFolderChildrenRecursive({
 
   while (pendingFolders.length > 0 && files.length < maxFiles) {
     const currentFolderId = pendingFolders.pop();
-    if (!currentFolderId) break;
+    if (!currentFolderId) {
+      break;
+    }
 
     let nextUrl: string | null = new URL(
       `https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(currentFolderId)}/children`
@@ -87,8 +89,12 @@ async function listFolderChildrenRecursive({
 
       const children = Array.isArray(data.value) ? data.value : [];
       for (const child of children) {
-        if (files.length >= maxFiles) break;
-        if (!child?.id || !child?.name) continue;
+        if (files.length >= maxFiles) {
+          break;
+        }
+        if (!child?.id || !child?.name) {
+          continue;
+        }
         if (child.folder) {
           pendingFolders.push(child.id);
         } else if (child.file && isSupportedMicrosoftFileName(child.name)) {

@@ -25,9 +25,13 @@ export function createState() {
 
 export function decodeJwtPayload<T>(jwt: string): T | null {
   const parts = jwt.split(".");
-  if (parts.length < 2) return null;
+  if (parts.length < 2) {
+    return null;
+  }
   const payload = parts[1];
-  if (typeof payload !== "string" || payload.length === 0) return null;
+  if (typeof payload !== "string" || payload.length === 0) {
+    return null;
+  }
 
   const padded =
     payload.length % 4 === 0

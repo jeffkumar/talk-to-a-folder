@@ -15,10 +15,16 @@ export type ChartPayloadV1 = {
 export function safeParseChartPayload(content: string): ChartPayloadV1 | null {
   try {
     const parsed: unknown = JSON.parse(content);
-    if (!parsed || typeof parsed !== "object") return null;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
     const p = parsed as Partial<ChartPayloadV1>;
-    if (p.version !== 1) return null;
-    if (typeof p.title !== "string") return null;
+    if (p.version !== 1) {
+      return null;
+    }
+    if (typeof p.title !== "string") {
+      return null;
+    }
     if (
       p.breakdown !== "category" &&
       p.breakdown !== "month" &&
@@ -27,8 +33,12 @@ export function safeParseChartPayload(content: string): ChartPayloadV1 | null {
     ) {
       return null;
     }
-    if (p.unit !== "USD") return null;
-    if (!Array.isArray(p.rows)) return null;
+    if (p.unit !== "USD") {
+      return null;
+    }
+    if (!Array.isArray(p.rows)) {
+      return null;
+    }
     const rows = p.rows
       .filter((r) => r && typeof r === "object")
       .map((r) => r as { label?: unknown; value?: unknown; count?: unknown })
@@ -60,7 +70,9 @@ export function safeParseChartPayload(content: string): ChartPayloadV1 | null {
 
 function sum(values: number[]) {
   let s = 0;
-  for (const v of values) s += v;
+  for (const v of values) {
+    s += v;
+  }
   return s;
 }
 
@@ -71,7 +83,9 @@ function formatUsd(value: number) {
 
 function formatMonthLabel(label: string): string {
   const m = label.match(/^(\d{4})-(\d{2})$/);
-  if (!m) return label;
+  if (!m) {
+    return label;
+  }
   const year = Number(m[1]);
   const month = Number(m[2]);
   if (

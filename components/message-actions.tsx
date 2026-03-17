@@ -3,16 +3,16 @@ import { Quote } from "lucide-react";
 import { memo, useState } from "react";
 import { toast } from "sonner";
 import { useCopyToClipboard } from "usehooks-ts";
-import type { Vote } from "@/lib/db/schema";
-import type { ChatMessage } from "@/lib/types";
-import { Action, Actions } from "./elements/actions";
-import { CopyIcon } from "./icons";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
+import type { Vote } from "@/lib/db/schema";
+import type { ChatMessage } from "@/lib/types";
+import { Action, Actions } from "./elements/actions";
+import { CopyIcon } from "./icons";
 
 export function PureMessageActions({
   chatId,
@@ -66,14 +66,14 @@ export function PureMessageActions({
       </Action>
 
       {onToggleCitations && (
-        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+        <Popover onOpenChange={setPopoverOpen} open={popoverOpen}>
           <PopoverTrigger asChild>
             <Button
               aria-label="Toggle citations"
               className="relative size-7 p-1 text-muted-foreground hover:text-foreground"
+              onClick={onToggleCitations}
               onPointerEnter={() => setPopoverOpen(true)}
               onPointerLeave={() => setPopoverOpen(false)}
-              onClick={onToggleCitations}
               size="sm"
               type="button"
               variant="ghost"
@@ -84,9 +84,9 @@ export function PureMessageActions({
           <PopoverContent
             align="start"
             className="w-56 p-3 text-muted-foreground text-sm"
-            side="top"
             onPointerEnter={() => setPopoverOpen(true)}
             onPointerLeave={() => setPopoverOpen(false)}
+            side="top"
           >
             <p>
               {showCitations

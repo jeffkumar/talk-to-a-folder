@@ -18,7 +18,7 @@ import {
 
 const MAX_CONTENT_CHARS = 3800;
 
-function safeProjectSlug(input: string) {
+function _safeProjectSlug(input: string) {
   const slug = input.toLowerCase().replace(/[^a-z0-9_]+/g, "_");
   return slug.replace(/^_+|_+$/g, "") || "default";
 }
@@ -35,8 +35,12 @@ function chunkText(text: string, maxLen = 2400, overlap = 200) {
   while (i < n) {
     const end = Math.min(i + maxLen, n);
     const slice = text.slice(i, end).trim();
-    if (slice) chunks.push(slice);
-    if (end === n) break;
+    if (slice) {
+      chunks.push(slice);
+    }
+    if (end === n) {
+      break;
+    }
     i += step;
   }
   return chunks;
@@ -145,7 +149,9 @@ function processSemanticChunks(chunks: string[], maxLen = 2400): string[] {
 
   for (const chunk of chunks) {
     const trimmed = chunk.trim();
-    if (!trimmed) continue;
+    if (!trimmed) {
+      continue;
+    }
 
     if (trimmed.length <= maxLen) {
       results.push(trimmed);
@@ -159,28 +165,18 @@ function processSemanticChunks(chunks: string[], maxLen = 2400): string[] {
   return results;
 }
 
-async function extractTextFromPdf(buffer: Buffer) {
+async function _extractTextFromPdf(buffer: Buffer) {
   // pdfjs-dist references some browser globals (DOMMatrix/ImageData/Path2D) at module init.
   // We only do text extraction (no rendering), so lightweight stubs are sufficient in Node.
   const g = globalThis as unknown as Record<string, unknown>;
   if (typeof g.DOMMatrix === "undefined") {
-    g.DOMMatrix = class DOMMatrix {
-      // Intentionally empty stub for server-side text extraction.
-      // eslint-disable-next-line @typescript-eslint/no-useless-constructor
-      constructor() {}
-    };
+    g.DOMMatrix = class DOMMatrix {};
   }
   if (typeof g.ImageData === "undefined") {
-    g.ImageData = class ImageData {
-      // eslint-disable-next-line @typescript-eslint/no-useless-constructor
-      constructor() {}
-    };
+    g.ImageData = class ImageData {};
   }
   if (typeof g.Path2D === "undefined") {
-    g.Path2D = class Path2D {
-      // eslint-disable-next-line @typescript-eslint/no-useless-constructor
-      constructor() {}
-    };
+    g.Path2D = class Path2D {};
   }
 
   try {
@@ -324,22 +320,13 @@ async function extractPagesWithPdfjs(buffer: Buffer): Promise<string[]> {
   // Fallback: pdfjs-based extraction when Reducto is unavailable.
   const g = globalThis as unknown as Record<string, unknown>;
   if (typeof g.DOMMatrix === "undefined") {
-    g.DOMMatrix = class DOMMatrix {
-      // eslint-disable-next-line @typescript-eslint/no-useless-constructor
-      constructor() {}
-    };
+    g.DOMMatrix = class DOMMatrix {};
   }
   if (typeof g.ImageData === "undefined") {
-    g.ImageData = class ImageData {
-      // eslint-disable-next-line @typescript-eslint/no-useless-constructor
-      constructor() {}
-    };
+    g.ImageData = class ImageData {};
   }
   if (typeof g.Path2D === "undefined") {
-    g.Path2D = class Path2D {
-      // eslint-disable-next-line @typescript-eslint/no-useless-constructor
-      constructor() {}
-    };
+    g.Path2D = class Path2D {};
   }
 
   try {
@@ -620,7 +607,7 @@ export async function ingestUploadedDocToTurbopuffer({
   let processedTextBlobUrl: string | null = null;
   let textToIndex = fullText; // Default to raw text
 
-  if (workflowConfig && workflowConfig.agentId) {
+  if (workflowConfig?.agentId) {
     console.info(
       `[ingest] Applying extraction prompt for workflow agent "${workflowConfig.agentName}"`
     );
@@ -708,10 +695,9 @@ export async function ingestUploadedDocToTurbopuffer({
           ? `${chunk.slice(0, MAX_CONTENT_CHARS)}…`
           : chunk,
       sourceType: "docs",
-      doc_source:
-        sourceUrl && sourceUrl.toLowerCase().includes("sharepoint.com")
-          ? "sharepoint"
-          : "upload",
+      doc_source: sourceUrl?.toLowerCase().includes("sharepoint.com")
+        ? "sharepoint"
+        : "upload",
       source_url: sourceUrl ?? null,
       sourceCreatedAtMs,
       indexedAtMs,
@@ -797,10 +783,9 @@ export async function ingestDocSummaryToTurbopuffer({
     vector,
     content,
     sourceType: "docs",
-    doc_source:
-      sourceUrl && sourceUrl.toLowerCase().includes("sharepoint.com")
-        ? "sharepoint"
-        : "upload",
+    doc_source: sourceUrl?.toLowerCase().includes("sharepoint.com")
+      ? "sharepoint"
+      : "upload",
     source_url: sourceUrl ?? null,
     sourceCreatedAtMs,
     indexedAtMs,

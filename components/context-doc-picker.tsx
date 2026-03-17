@@ -45,7 +45,9 @@ export function ContextDocPicker({
   const [filterLabelName, setFilterLabelName] = useState<string | null>(null);
 
   const { data: notesData } = useSWR<{ notes?: ProjectDoc[] }>(
-    selectedProjectId ? `/api/projects/${selectedProjectId}/docs?type=note` : null,
+    selectedProjectId
+      ? `/api/projects/${selectedProjectId}/docs?type=note`
+      : null,
     fetcher
   );
 
@@ -83,11 +85,18 @@ export function ContextDocPicker({
     const contextIds = new Set(contextDocs.map((d) => d.id));
     const searchLower = docSearchQuery.toLowerCase().trim();
     return availableNotes.filter((d) => {
-      if (contextIds.has(d.id)) return false;
-      if (searchLower && !d.name.toLowerCase().includes(searchLower))
+      if (contextIds.has(d.id)) {
         return false;
-      if (filterLabelName && !d.labels?.some((l) => l.name === filterLabelName))
+      }
+      if (searchLower && !d.name.toLowerCase().includes(searchLower)) {
         return false;
+      }
+      if (
+        filterLabelName &&
+        !d.labels?.some((l) => l.name === filterLabelName)
+      ) {
+        return false;
+      }
       return true;
     });
   }, [availableNotes, contextDocs, docSearchQuery, filterLabelName]);
@@ -96,17 +105,24 @@ export function ContextDocPicker({
     const contextIds = new Set(contextDocs.map((d) => d.id));
     const searchLower = docSearchQuery.toLowerCase().trim();
     return availableFiles.filter((d) => {
-      if (contextIds.has(d.id)) return false;
-      if (searchLower && !d.name.toLowerCase().includes(searchLower))
+      if (contextIds.has(d.id)) {
         return false;
-      if (filterLabelName) return false;
+      }
+      if (searchLower && !d.name.toLowerCase().includes(searchLower)) {
+        return false;
+      }
+      if (filterLabelName) {
+        return false;
+      }
       return true;
     });
   }, [availableFiles, contextDocs, docSearchQuery, filterLabelName]);
 
   const hasDocsToAdd = notesToAdd.length > 0 || filesToAdd.length > 0;
 
-  if (!selectedProjectId) return null;
+  if (!selectedProjectId) {
+    return null;
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-1">

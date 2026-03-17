@@ -15,7 +15,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 import useSWR from "swr";
 import { GoogleDriveIcon, OneDriveIcon } from "@/components/icons";
-import { ENABLE_MICROSOFT_INTEGRATION } from "@/lib/constants";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +40,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProjectSelector } from "@/hooks/use-project-selector";
+import { ENABLE_MICROSOFT_INTEGRATION } from "@/lib/constants";
 import type { ProjectDoc } from "@/lib/db/schema";
 import { fetcher } from "@/lib/utils";
 
@@ -63,12 +63,12 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-interface ViewDocsProps {
+type ViewDocsProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   ignoredDocIds: string[];
   setIgnoredDocIds: (ids: string[]) => void;
-}
+};
 
 export function ViewDocs({
   isOpen,
@@ -108,7 +108,9 @@ export function ViewDocs({
 
   const currentUserId = session?.user?.id ?? null;
   const role = (() => {
-    if (!currentUserId) return null;
+    if (!currentUserId) {
+      return null;
+    }
     const row = membersData?.members?.find(
       (m) => m.kind === "user" && m.userId === currentUserId
     );
@@ -127,7 +129,9 @@ export function ViewDocs({
   };
 
   const truncateFilename = (filename: string, maxChars = 20) => {
-    if (filename.length <= maxChars) return filename;
+    if (filename.length <= maxChars) {
+      return filename;
+    }
     return `${filename.slice(0, maxChars)}…`;
   };
 

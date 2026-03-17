@@ -74,9 +74,7 @@ export async function GET(
 const CreateNoteSchema = z.object({
   title: z.string().min(1),
   content: z.string(),
-  labels: z
-    .array(z.object({ name: z.string(), color: z.string() }))
-    .optional(),
+  labels: z.array(z.object({ name: z.string(), color: z.string() })).optional(),
 });
 
 export async function POST(

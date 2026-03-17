@@ -102,6 +102,6 @@ export default defineConfig({
     command: "pnpm dev",
     url: `${baseURL}/ping`,
     timeout: 120 * 1000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
   },
 });

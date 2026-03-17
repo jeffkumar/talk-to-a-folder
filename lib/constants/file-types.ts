@@ -78,11 +78,17 @@ export function getFileTypesDisplayString(): string {
  * Check if a filename has a supported extension.
  */
 export function isSupportedFileName(name: string | null): boolean {
-  if (!name) return false;
+  if (!name) {
+    return false;
+  }
   const trimmed = name.trim();
-  if (!trimmed) return false;
+  if (!trimmed) {
+    return false;
+  }
   const lastDot = trimmed.lastIndexOf(".");
-  if (lastDot <= 0 || lastDot === trimmed.length - 1) return false;
+  if (lastDot <= 0 || lastDot === trimmed.length - 1) {
+    return false;
+  }
   const ext = trimmed.slice(lastDot + 1).toLowerCase();
   return isSupportedExtension(ext);
 }

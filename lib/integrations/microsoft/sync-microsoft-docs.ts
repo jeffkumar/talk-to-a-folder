@@ -39,7 +39,9 @@ const inFlightSyncLocks = new Map<string, InFlightLock>();
 const IN_FLIGHT_LOCK_TTL_MS = 10 * 60 * 1000;
 
 function isVercelBlobUrl(value: string | null | undefined) {
-  if (!value) return false;
+  if (!value) {
+    return false;
+  }
   try {
     const url = new URL(value);
     return url.hostname.endsWith(".public.blob.vercel-storage.com");
@@ -64,7 +66,9 @@ function releaseSyncLock(key: string) {
 
 function isSupportedMimeType(mimeType: string) {
   // Also accept application/csv as an alias for text/csv
-  if (mimeType === "application/csv") return true;
+  if (mimeType === "application/csv") {
+    return true;
+  }
   return checkSupportedMimeType(mimeType);
 }
 

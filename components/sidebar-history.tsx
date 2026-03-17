@@ -111,7 +111,9 @@ export function getChatHistoryPaginationKey(
 const FILTER_BY_PROJECT_KEY = "flowchat_filter_by_project";
 
 function readFilterByProjectFromStorage(): boolean {
-  if (typeof window === "undefined") return true;
+  if (typeof window === "undefined") {
+    return true;
+  }
   const stored = localStorage.getItem(FILTER_BY_PROJECT_KEY);
   return stored === null ? true : stored === "true";
 }

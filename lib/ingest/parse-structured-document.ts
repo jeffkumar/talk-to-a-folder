@@ -6,7 +6,6 @@ import Papa from "papaparse";
 import Reducto, { toFile } from "reductoai";
 import {
   deleteFinancialTransactionsByDocumentId,
-  deleteInvoiceByDocumentId,
   deleteInvoiceLineItemsByDocumentId,
   getProjectByIdForUser,
   getProjectDocById,
@@ -42,7 +41,9 @@ function normalizeDescription(value: unknown): string {
 
 function normalizeMerchantLike(value: string): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return null;
+  }
 
   // Remove leading/trailing noise that often appears in CC exports/OCR.
   const cleaned = trimmed
@@ -51,11 +52,15 @@ function normalizeMerchantLike(value: string): string | null {
     .replace(/\s+/g, " ")
     .trim();
 
-  if (!cleaned) return null;
+  if (!cleaned) {
+    return null;
+  }
 
   // Reject values that are basically punctuation, or mostly digits.
   const letters = cleaned.replace(/[^A-Za-z]/g, "");
-  if (letters.length < 3) return null;
+  if (letters.length < 3) {
+    return null;
+  }
 
   return cleaned.slice(0, 200);
 }
@@ -202,14 +207,23 @@ function classifyCcTxnCategory(description: string): string | null {
 }
 
 function parseYmdDate(value: unknown): string | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string") {
+    return null;
+  }
   const trimmed = value.trim();
   const toYmd = (y: number, m: number, d: number) => {
-    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d))
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
       return null;
-    if (y < 1900 || y > 2200) return null;
-    if (m < 1 || m > 12) return null;
-    if (d < 1 || d > 31) return null;
+    }
+    if (y < 1900 || y > 2200) {
+      return null;
+    }
+    if (m < 1 || m > 12) {
+      return null;
+    }
+    if (d < 1 || d > 31) {
+      return null;
+    }
     const yyyy = String(y).padStart(4, "0");
     const mm = String(m).padStart(2, "0");
     const dd = String(d).padStart(2, "0");
@@ -235,7 +249,9 @@ function parseDecimalString(value: unknown): string | null {
   }
   if (typeof value === "string") {
     const trimmed = value.trim();
-    if (!trimmed) return null;
+    if (!trimmed) {
+      return null;
+    }
 
     const hasParens =
       trimmed.startsWith("(") && trimmed.endsWith(")") && trimmed.length > 2;
@@ -247,9 +263,13 @@ function parseDecimalString(value: unknown): string | null {
       .replace(/,/g, "")
       .replace(/\s+/g, "")
       .replace(/^\+/, "");
-    if (!cleaned) return null;
+    if (!cleaned) {
+      return null;
+    }
     const parsed = Number(cleaned);
-    if (!Number.isFinite(parsed)) return null;
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
     const signed = hasParens ? -Math.abs(parsed) : parsed;
     return signed.toFixed(2);
   }
@@ -268,7 +288,9 @@ function isCsvLike({
   filename: string;
 }) {
   const lower = filename.toLowerCase();
-  if (lower.endsWith(".csv")) return true;
+  if (lower.endsWith(".csv")) {
+    return true;
+  }
   return (
     mimeType === "text/csv" ||
     mimeType === "application/csv" ||
@@ -309,7 +331,9 @@ function parseCsvTransactions({
   const pickField = (candidates: string[]) => {
     const set = new Set(candidates);
     for (let i = 0; i < normFields.length; i += 1) {
-      if (set.has(normFields[i])) return fields[i];
+      if (set.has(normFields[i])) {
+        return fields[i];
+      }
     }
     return null;
   };
@@ -371,7 +395,9 @@ function parseCsvTransactions({
   for (const row of rows) {
     const rawDate = row[dateField];
     const txnDate = parseYmdDate(rawDate);
-    if (!txnDate) continue;
+    if (!txnDate) {
+      continue;
+    }
 
     const desc = descField ? normalizeDescription(row[descField]) : "";
     const category =
@@ -390,10 +416,15 @@ function parseCsvTransactions({
     } else {
       const debit = debitField ? parseDecimalString(row[debitField]) : null;
       const credit = creditField ? parseDecimalString(row[creditField]) : null;
-      if (credit && credit !== "0.00") amount = credit;
-      else if (debit && debit !== "0.00") amount = (-Number(debit)).toFixed(2);
+      if (credit && credit !== "0.00") {
+        amount = credit;
+      } else if (debit && debit !== "0.00") {
+        amount = (-Number(debit)).toFixed(2);
+      }
     }
-    if (!amount) continue;
+    if (!amount) {
+      continue;
+    }
 
     out.push({
       date: txnDate,
@@ -506,7 +537,9 @@ export async function parseStructuredProjectDoc({
   ingestSummaryToTurbopuffer?: boolean;
 }): Promise<ParseStructuredDocResult> {
   const doc = await getProjectDocById({ docId });
-  if (!doc) return { ok: false, error: "Not found" };
+  if (!doc) {
+    return { ok: false, error: "Not found" };
+  }
   if (!isStructuredType(doc.documentType)) {
     return {
       ok: false,
@@ -518,7 +551,9 @@ export async function parseStructuredProjectDoc({
     projectId: doc.projectId,
     userId,
   });
-  if (!project) return { ok: false, error: "Not found" };
+  if (!project) {
+    return { ok: false, error: "Not found" };
+  }
 
   try {
     await updateProjectDoc({
@@ -530,7 +565,9 @@ export async function parseStructuredProjectDoc({
     });
 
     const rawRes = await fetch(doc.blobUrl);
-    if (!rawRes.ok) throw new Error("Failed to download raw file");
+    if (!rawRes.ok) {
+      throw new Error("Failed to download raw file");
+    }
     const rawBuffer = await rawRes.arrayBuffer();
 
     const isCsv = isCsvLike({ mimeType: doc.mimeType, filename: doc.filename });
@@ -585,7 +622,9 @@ export async function parseStructuredProjectDoc({
         // Reducto can return transactions for CSVs but omit running balance even when present in the CSV.
         // If we can parse balances from the CSV, prefer the CSV-parsed transactions.
         const reductoHasBalance = Transactions.some((t) => {
-          if (!t || typeof t !== "object") return false;
+          if (!t || typeof t !== "object") {
+            return false;
+          }
           return "balance" in (t as Record<string, unknown>);
         });
         if (csvHasBalance && !reductoHasBalance) {
@@ -664,7 +703,9 @@ export async function parseStructuredProjectDoc({
             t.amount && typeof t.amount === "string"
               ? t.amount
               : parseDecimalString(t.amount);
-          if (!txnDate || !amount) return null;
+          if (!txnDate || !amount) {
+            return null;
+          }
 
           const description = normalizeDescription(t.description);
           const merchantRaw =

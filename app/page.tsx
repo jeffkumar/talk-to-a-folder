@@ -36,18 +36,19 @@ function LandingPageContent() {
       {/* Header */}
       <header className="border-border border-b">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <a href="https://adventureflow.ai" className="flex items-center gap-3">
+          <a
+            className="flex items-center gap-3"
+            href="https://adventureflow.ai"
+          >
             <Image
               alt="Flowchat Logo"
-              className="h-12 w-12 logo-invert"
+              className="logo-invert h-12 w-12"
               height={48}
               src="/af-logo.svg"
               unoptimized
               width={48}
             />
-            <span className="font-semibold text-brand text-xl">
-              Flowchat
-            </span>
+            <span className="font-semibold text-brand text-xl">Flowchat</span>
           </a>
           <nav className="flex items-center gap-4">
             <Link
@@ -69,8 +70,8 @@ function LandingPageContent() {
       {/* Hero Section */}
       <main className="mx-auto max-w-6xl px-6">
         <section className="relative py-20 text-center md:py-32">
-          <div className="hero-radial" aria-hidden="true" />
-          <div className="hero-grid" aria-hidden="true" />
+          <div aria-hidden="true" className="hero-radial" />
+          <div aria-hidden="true" className="hero-grid" />
           <HeroGridBlocks />
           <div className="pointer-events-none relative z-10">
             <div className="landing-badge mb-6 inline-flex items-center gap-2 rounded-full px-4 py-2 font-medium text-brand text-sm">
@@ -382,7 +383,7 @@ function LandingPageContent() {
                     <div className="app-preview-message app-preview-message-user">
                       <div className="app-preview-bubble app-preview-bubble-user">
                         Draft a follow-up email to the county planning
-                        department about our permit timeline.                         Reference the docs
+                        department about our permit timeline. Reference the docs
                         from last week&apos;s call
                       </div>
                     </div>
@@ -666,7 +667,6 @@ function LandingPageContent() {
             </div>
           </div>
         </section>
-
       </main>
 
       {/* CTA Section */}
@@ -696,7 +696,7 @@ function LandingPageContent() {
             <div className="flex items-center gap-3">
               <Image
                 alt="Flowchat Logo"
-                className="h-8 w-8 logo-invert"
+                className="logo-invert h-8 w-8"
                 height={32}
                 src="/af-logo.svg"
                 unoptimized

@@ -70,7 +70,9 @@ export const financeQuery = ({ session, projectId }: FinanceQueryProps) =>
       try {
         const nowYear = new Date().getUTCFullYear();
         const filtersFromTimeWindow = (() => {
-          if (!input.time_window) return null;
+          if (!input.time_window) {
+            return null;
+          }
 
           const year = input.time_window.year ?? nowYear;
           if (input.time_window.kind === "year") {
@@ -80,7 +82,9 @@ export const financeQuery = ({ session, projectId }: FinanceQueryProps) =>
           }
 
           const month = input.time_window.month;
-          if (typeof month !== "number") return null;
+          if (typeof month !== "number") {
+            return null;
+          }
           const mm = String(month).padStart(2, "0");
           const start = `${year}-${mm}-01`;
           const endYear = month === 12 ? year + 1 : year;
@@ -104,7 +108,9 @@ export const financeQuery = ({ session, projectId }: FinanceQueryProps) =>
         const filtersForQuery = (() => {
           const docIds = effectiveFilters?.doc_ids;
           const hasDocIds = Array.isArray(docIds) && docIds.length > 0;
-          if (!hasDocIds) return effectiveFilters;
+          if (!hasDocIds) {
+            return effectiveFilters;
+          }
 
           const hasEntityFilter =
             effectiveFilters?.entity_kind === "personal" ||
@@ -112,7 +118,9 @@ export const financeQuery = ({ session, projectId }: FinanceQueryProps) =>
             (typeof effectiveFilters?.entity_name === "string" &&
               effectiveFilters.entity_name.trim().length > 0);
 
-          if (!hasEntityFilter) return effectiveFilters;
+          if (!hasEntityFilter) {
+            return effectiveFilters;
+          }
 
           const {
             entity_kind: _entityKind,
@@ -125,13 +133,17 @@ export const financeQuery = ({ session, projectId }: FinanceQueryProps) =>
         const entityFilterDropped = (() => {
           const docIds = effectiveFilters?.doc_ids;
           const hasDocIds = Array.isArray(docIds) && docIds.length > 0;
-          if (!hasDocIds) return false;
+          if (!hasDocIds) {
+            return false;
+          }
           const hadEntity =
             effectiveFilters?.entity_kind === "personal" ||
             effectiveFilters?.entity_kind === "business" ||
             (typeof effectiveFilters?.entity_name === "string" &&
               effectiveFilters.entity_name.trim().length > 0);
-          if (!hadEntity) return false;
+          if (!hadEntity) {
+            return false;
+          }
 
           const f = filtersForQuery as unknown as
             | { entity_kind?: unknown; entity_name?: unknown }
@@ -210,7 +222,9 @@ export const financeQuery = ({ session, projectId }: FinanceQueryProps) =>
             (filtersForQuery?.amount_min ?? 0) > 0 &&
             primary.count === 0;
 
-          if (!shouldFallback) return primary;
+          if (!shouldFallback) {
+            return primary;
+          }
 
           const invoice = await financeSum({
             userId: session.user.id,

@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { startTransition, useState } from "react";
-import { saveChatModelAsCookie } from "@/app/(chat)/actions";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { CheckCircleFillIcon } from "@/components/icons";
 import { ProjectDetails } from "@/components/project-details";

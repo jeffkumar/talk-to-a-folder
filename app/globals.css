@@ -955,8 +955,16 @@
   inset: -20% -10% 0 -10%;
   z-index: 0;
   background:
-    radial-gradient(600px circle at 50% -10%, rgba(252, 185, 0, 0.15), transparent 40%),
-    radial-gradient(800px circle at 80% 0%, rgba(255, 255, 255, 0.08), transparent 40%);
+    radial-gradient(
+      600px circle at 50% -10%,
+      rgba(252, 185, 0, 0.15),
+      transparent 40%
+    ),
+    radial-gradient(
+      800px circle at 80% 0%,
+      rgba(255, 255, 255, 0.08),
+      transparent 40%
+    );
   filter: blur(2px);
   pointer-events: none;
 }

@@ -9,7 +9,6 @@ import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import {
   deleteFinancialTransactionsByDocumentId,
-  deleteInvoiceByDocumentId,
   deleteInvoiceLineItemsByDocumentId,
   getProjectByIdForUser,
   getProjectDocById,
@@ -36,14 +35,23 @@ function normalizeDescription(value: unknown): string {
 }
 
 function parseYmdDate(value: unknown): string | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string") {
+    return null;
+  }
   const trimmed = value.trim();
   const toYmd = (y: number, m: number, d: number) => {
-    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d))
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
       return null;
-    if (y < 1900 || y > 2200) return null;
-    if (m < 1 || m > 12) return null;
-    if (d < 1 || d > 31) return null;
+    }
+    if (y < 1900 || y > 2200) {
+      return null;
+    }
+    if (m < 1 || m > 12) {
+      return null;
+    }
+    if (d < 1 || d > 31) {
+      return null;
+    }
     const yyyy = String(y).padStart(4, "0");
     const mm = String(m).padStart(2, "0");
     const dd = String(d).padStart(2, "0");
@@ -71,9 +79,13 @@ function parseDecimalString(value: unknown): string | null {
   }
   if (typeof value === "string") {
     const cleaned = value.trim().replace(/,/g, "");
-    if (!cleaned) return null;
+    if (!cleaned) {
+      return null;
+    }
     const parsed = Number(cleaned);
-    if (!Number.isFinite(parsed)) return null;
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
     return parsed.toFixed(2);
   }
   return null;
@@ -91,7 +103,9 @@ function isCsvLike({
   filename: string;
 }) {
   const lower = filename.toLowerCase();
-  if (lower.endsWith(".csv")) return true;
+  if (lower.endsWith(".csv")) {
+    return true;
+  }
   return (
     mimeType === "text/csv" ||
     mimeType === "application/csv" ||
@@ -130,7 +144,9 @@ function parseCsvTransactions({
   const pickField = (candidates: string[]) => {
     const set = new Set(candidates);
     for (let i = 0; i < normFields.length; i += 1) {
-      if (set.has(normFields[i])) return fields[i];
+      if (set.has(normFields[i])) {
+        return fields[i];
+      }
     }
     return null;
   };
@@ -178,7 +194,9 @@ function parseCsvTransactions({
   for (const row of rows) {
     const rawDate = row[dateField];
     const txnDate = parseYmdDate(rawDate);
-    if (!txnDate) continue;
+    if (!txnDate) {
+      continue;
+    }
 
     const desc = descField ? normalizeDescription(row[descField]) : "";
     const currency =
@@ -200,7 +218,9 @@ function parseCsvTransactions({
         amount = (creditNum - debitNum).toFixed(2);
       }
     }
-    if (!amount) continue;
+    if (!amount) {
+      continue;
+    }
 
     out.push({
       date: txnDate,
@@ -456,7 +476,9 @@ export async function POST(
         .map((t, idx) => {
           const txnDate = parseYmdDate(t.date);
           const amount = parseDecimalString(t.amount);
-          if (!txnDate || !amount) return null;
+          if (!txnDate || !amount) {
+            return null;
+          }
           const description = normalizeDescription(t.description);
           const currency =
             typeof t.currency === "string"

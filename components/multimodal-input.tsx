@@ -5,14 +5,6 @@ import { Trigger } from "@radix-ui/react-select";
 import type { UIMessage } from "ai";
 import fastDeepEqual from "fast-deep-equal";
 import {
-  BotIcon,
-  EllipsisIcon,
-  FileIcon,
-  ImageIcon,
-  SearchIcon,
-  ShoppingBagIcon,
-} from "lucide-react";
-import {
   type ChangeEvent,
   type Dispatch,
   memo,
@@ -20,7 +12,6 @@ import {
   startTransition,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -68,7 +59,6 @@ import {
   ArrowUpIcon,
   ChevronDownIcon,
   CpuIcon,
-  PaperclipIcon,
   PlusIcon,
   StopIcon,
 } from "./icons";
@@ -96,9 +86,13 @@ function uniqueStrings(values: string[]): string[] {
   const seen = new Set<string>();
   for (const value of values) {
     const v = value.trim();
-    if (v.length === 0) continue;
+    if (v.length === 0) {
+      continue;
+    }
     const key = v.toLowerCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      continue;
+    }
     seen.add(key);
     out.push(v);
   }
@@ -263,11 +257,11 @@ function PureMultimodalInput({
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
   const [uploadDocumentType, setUploadDocumentType] =
     useState<UploadDocumentType>("general_doc");
-  const [invoiceSender, setInvoiceSender] = useLocalStorage(
+  const [invoiceSender, _setInvoiceSender] = useLocalStorage(
     "invoice_sender_last",
     ""
   );
-  const [invoiceRecipient, setInvoiceRecipient] = useLocalStorage(
+  const [invoiceRecipient, _setInvoiceRecipient] = useLocalStorage(
     "invoice_recipient_last",
     ""
   );
@@ -353,13 +347,19 @@ function PureMultimodalInput({
       formData.append("entityKind", uploadEntityKind);
       if (uploadEntityKind === "business") {
         const bn = uploadBusinessName.trim();
-        if (bn.length > 0) formData.append("entityName", bn);
+        if (bn.length > 0) {
+          formData.append("entityName", bn);
+        }
       }
       if (effectiveDocType === "invoice") {
         const sender = invoiceSender.trim();
         const recipient = invoiceRecipient.trim();
-        if (sender) formData.append("invoiceSender", sender);
-        if (recipient) formData.append("invoiceRecipient", recipient);
+        if (sender) {
+          formData.append("invoiceSender", sender);
+        }
+        if (recipient) {
+          formData.append("invoiceRecipient", recipient);
+        }
       }
       if (selectedProjectId) {
         formData.append("projectId", selectedProjectId);
@@ -438,7 +438,9 @@ function PureMultimodalInput({
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files || []);
-      if (files.length === 0) return;
+      if (files.length === 0) {
+        return;
+      }
 
       // Reset the file input
       if (event.target) {
@@ -861,7 +863,7 @@ function PureModelSelectorCompact({
   );
 }
 
-const ModelSelectorCompact = memo(PureModelSelectorCompact);
+const _ModelSelectorCompact = memo(PureModelSelectorCompact);
 
 function PureStopButton({
   stop,

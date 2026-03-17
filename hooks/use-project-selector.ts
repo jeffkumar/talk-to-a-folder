@@ -24,8 +24,12 @@ export function useProjectSelector() {
   }>("/api/projects", fetcher, {
     onErrorRetry: (error, _key, _config, revalidate, opts) => {
       // If DB is unreachable locally, don't retry forever (it makes dev look "stuck").
-      if (error instanceof ChatSDKError && error.type === "offline") return;
-      if (opts.retryCount >= 3) return;
+      if (error instanceof ChatSDKError && error.type === "offline") {
+        return;
+      }
+      if (opts.retryCount >= 3) {
+        return;
+      }
       setTimeout(() => revalidate({ retryCount: opts.retryCount + 1 }), 2000);
     },
   });
@@ -61,7 +65,7 @@ export function useProjectSelector() {
       }
     }
     setHasCheckedStorage(true);
-  }, [setSelectedProjectId, storageKey]);
+  }, [setSelectedProjectId]);
 
   // Filter out default projects - these are the ones shown in the UI
   const visibleProjects = projects.filter((p) => !p.isDefault);
@@ -69,8 +73,12 @@ export function useProjectSelector() {
   // Auto-select first project if nothing selected or selected ID invalid
   // But respect pending selections to avoid race conditions when creating new projects
   useEffect(() => {
-    if (!hasCheckedStorage) return;
-    if (isActuallyLoading) return;
+    if (!hasCheckedStorage) {
+      return;
+    }
+    if (isActuallyLoading) {
+      return;
+    }
 
     // Check if there's a pending selection that exists in the projects list
     if (pendingSelectionRef.current) {

@@ -7,10 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { unstable_serialize } from "swr/infinite";
-import {
-  ChatHeader,
-  type RetrievalRangePreset,
-} from "@/components/chat-header";
+import { ChatHeader } from "@/components/chat-header";
 import {
   type ContextDoc,
   ContextDocPicker,
@@ -55,6 +52,7 @@ import { useProjectSelector } from "@/hooks/use-project-selector";
 import { type AgentMode, DEFAULT_AGENT_MODE } from "@/lib/ai/models";
 import type { ProjectDoc, Vote } from "@/lib/db/schema";
 import { ChatSDKError } from "@/lib/errors";
+import { extractDriveFolderIds } from "@/lib/integrations/google/parse-drive-url";
 import type {
   Attachment,
   ChatMessage,
@@ -74,7 +72,6 @@ import {
   readIgnoredDocIdsForProject,
   writeIgnoredDocIdsForProject,
 } from "@/lib/utils";
-import { extractDriveFolderIds } from "@/lib/integrations/google/parse-drive-url";
 import { Artifact } from "./artifact";
 import { useDataStream } from "./data-stream-provider";
 import { DocumentTypePicker } from "./document-type-picker";
@@ -111,9 +108,13 @@ function uniqueStrings(values: string[]): string[] {
   const seen = new Set<string>();
   for (const value of values) {
     const v = value.trim();
-    if (v.length === 0) continue;
+    if (v.length === 0) {
+      continue;
+    }
     const key = v.toLowerCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      continue;
+    }
     seen.add(key);
     out.push(v);
   }
@@ -189,7 +190,6 @@ function BusinessNameTypeahead({
   );
 }
 
-
 export function Chat({
   id,
   initialMessages,
@@ -233,7 +233,7 @@ export function Chat({
   const { setDataStream } = useDataStream();
 
   const [input, setInput] = useState<string>("");
-  const [usage, setUsage] = useState<AppUsage | undefined>(initialLastContext);
+  const [_usage, setUsage] = useState<AppUsage | undefined>(initialLastContext);
   const [showCreditCardAlert, setShowCreditCardAlert] = useState(false);
   const [currentModelId, setCurrentModelId] = useState(initialChatModel);
   const currentModelIdRef = useRef(currentModelId);
@@ -251,15 +251,18 @@ export function Chat({
 
   // Switch to the chat's project if it differs from current selection
   useEffect(() => {
-    if (!chatProjectId) return;
-    if (selectedProjectId === chatProjectId) return;
+    if (!chatProjectId) {
+      return;
+    }
+    if (selectedProjectId === chatProjectId) {
+      return;
+    }
     // Ensure the project exists in the user's list before switching
     const projectExists = projects.some((p) => p.id === chatProjectId);
     if (projectExists) {
       setSelectedProjectId(chatProjectId);
     }
   }, [chatProjectId, selectedProjectId, projects, setSelectedProjectId]);
-
 
   const browserTimeZone =
     typeof Intl !== "undefined"
@@ -280,7 +283,9 @@ export function Chat({
   }, [selectedProjectId]);
 
   useEffect(() => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      return;
+    }
     writeIgnoredDocIdsForProject(selectedProjectId, ignoredDocIds);
   }, [ignoredDocIds, selectedProjectId]);
 
@@ -288,11 +293,8 @@ export function Chat({
   const targetDocIdsRef = useRef(targetDocIds);
 
   const [showCitations, setShowCitations] = useState(false);
-  const onToggleCitations = useCallback(
-    () => setShowCitations((v) => !v),
-    []
-  );
-  const [pendingSources, setPendingSources] = useState<
+  const onToggleCitations = useCallback(() => setShowCitations((v) => !v), []);
+  const [_pendingSources, setPendingSources] = useState<
     RetrievedSource[] | null
   >(null);
   const pendingSourcesRef = useRef<RetrievedSource[] | null>(null);
@@ -394,13 +396,13 @@ export function Chat({
         };
       }
     },
-    onFinish: (result) => {
+    onFinish: (_result) => {
       // If we have pending sources, attach them to the last message here
       // This is safe because the stream has finished
       const sourcesToAttach = pendingSourcesRef.current;
       if (sourcesToAttach) {
         setMessages((prevMessages) => {
-          const last = prevMessages[prevMessages.length - 1];
+          const last = prevMessages.at(-1);
           // We look for the last assistant message
           if (last && last.role === "assistant") {
             const newAnnotations = [
@@ -421,7 +423,7 @@ export function Chat({
       const chartDoc = pendingChartDocumentRef.current;
       if (chartDoc) {
         setMessages((prevMessages) => {
-          const last = prevMessages[prevMessages.length - 1];
+          const last = prevMessages.at(-1);
           if (last && last.role === "assistant") {
             const newAnnotations = [
               ...(last.annotations || []),
@@ -443,7 +445,7 @@ export function Chat({
       const timeRangeSelector = pendingTimeRangeSelectorRef.current;
       if (timeRangeSelector) {
         setMessages((prevMessages) => {
-          const last = prevMessages[prevMessages.length - 1];
+          const last = prevMessages.at(-1);
           if (last && last.role === "assistant") {
             const newAnnotations = [
               ...(last.annotations || []),
@@ -469,7 +471,7 @@ export function Chat({
       const entitySelector = pendingEntitySelectorRef.current;
       if (entitySelector) {
         setMessages((prevMessages) => {
-          const last = prevMessages[prevMessages.length - 1];
+          const last = prevMessages.at(-1);
           if (last && last.role === "assistant") {
             const newAnnotations = [
               ...(last.annotations || []),
@@ -592,25 +594,33 @@ export function Chat({
     const newFolderIds = folderIds.filter(
       (fid) => !resolvedFolderIdsRef.current.has(fid)
     );
-    if (newFolderIds.length === 0) return;
+    if (newFolderIds.length === 0) {
+      return;
+    }
 
     let cancelled = false;
 
     const resolve = async () => {
       for (const folderId of newFolderIds) {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         try {
           const res = await fetch(
             `/api/projects/${selectedProjectId}/integrations/google/resolve-folder?folderId=${encodeURIComponent(folderId)}`
           );
-          if (!res.ok || cancelled) continue;
+          if (!res.ok || cancelled) {
+            continue;
+          }
           const data = (await res.json()) as {
             synced: boolean;
             count: number;
             folderId: string;
             docs: Array<{ id: string; name: string; type: "note" | "file" }>;
           };
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
 
           resolvedFolderIdsRef.current.add(folderId);
           setFolderSyncStatus({
@@ -667,13 +677,22 @@ export function Chat({
       const isTimeRangeSelector = (
         a: unknown
       ): a is TimeRangeSelectorAnnotation => {
-        if (!a || typeof a !== "object") return false;
-        if (!("type" in a)) return false;
-        if ((a as { type?: unknown }).type !== "time-range-selector")
+        if (!a || typeof a !== "object") {
           return false;
-        if (!("data" in a)) return false;
+        }
+        if (!("type" in a)) {
+          return false;
+        }
+        if ((a as { type?: unknown }).type !== "time-range-selector") {
+          return false;
+        }
+        if (!("data" in a)) {
+          return false;
+        }
         const data = (a as { data?: unknown }).data;
-        if (!data || typeof data !== "object") return false;
+        if (!data || typeof data !== "object") {
+          return false;
+        }
         return (
           typeof (data as { questionId?: unknown }).questionId === "string"
         );
@@ -682,11 +701,15 @@ export function Chat({
       // Remove the selector UI from the message once applied (matches existing behavior).
       setMessages((prevMessages) =>
         prevMessages.map((m) => {
-          if (m.role !== "assistant" || !m.annotations) return m;
+          if (m.role !== "assistant" || !m.annotations) {
+            return m;
+          }
           const hasSelector = m.annotations.some(
             (a) => isTimeRangeSelector(a) && a.data.questionId === questionId
           );
-          if (!hasSelector) return m;
+          if (!hasSelector) {
+            return m;
+          }
           const annotations = m.annotations.filter(
             (a) => !(isTimeRangeSelector(a) && a.data.questionId === questionId)
           );
@@ -728,12 +751,22 @@ export function Chat({
       selectedEntitiesRef.current = entities;
 
       const isEntitySelector = (a: unknown): a is EntitySelectorAnnotation => {
-        if (!a || typeof a !== "object") return false;
-        if (!("type" in a)) return false;
-        if ((a as { type?: unknown }).type !== "entity-selector") return false;
-        if (!("data" in a)) return false;
+        if (!a || typeof a !== "object") {
+          return false;
+        }
+        if (!("type" in a)) {
+          return false;
+        }
+        if ((a as { type?: unknown }).type !== "entity-selector") {
+          return false;
+        }
+        if (!("data" in a)) {
+          return false;
+        }
         const data = (a as { data?: unknown }).data;
-        if (!data || typeof data !== "object") return false;
+        if (!data || typeof data !== "object") {
+          return false;
+        }
         return (
           typeof (data as { questionId?: unknown }).questionId === "string"
         );
@@ -742,11 +775,15 @@ export function Chat({
       // Remove the selector UI from the message once applied (matches existing behavior).
       setMessages((prevMessages) =>
         prevMessages.map((m) => {
-          if (m.role !== "assistant" || !m.annotations) return m;
+          if (m.role !== "assistant" || !m.annotations) {
+            return m;
+          }
           const hasSelector = m.annotations.some(
             (a) => isEntitySelector(a) && a.data.questionId === questionId
           );
-          if (!hasSelector) return m;
+          if (!hasSelector) {
+            return m;
+          }
           const annotations = m.annotations.filter(
             (a) => !(isEntitySelector(a) && a.data.questionId === questionId)
           );
@@ -985,7 +1022,6 @@ export function Chat({
     hasInitializedTargetDocIds,
     hasInitializedEntity,
     hasInitializedAgentId,
-    id,
   ]);
 
   const { data: votes } = useSWR<Vote[]>(
@@ -1021,8 +1057,12 @@ export function Chat({
   useEffect(() => {
     const sender = localStorage.getItem("invoice_sender_last");
     const recipient = localStorage.getItem("invoice_recipient_last");
-    if (typeof sender === "string") setInvoiceSender(sender);
-    if (typeof recipient === "string") setInvoiceRecipient(recipient);
+    if (typeof sender === "string") {
+      setInvoiceSender(sender);
+    }
+    if (typeof recipient === "string") {
+      setInvoiceRecipient(recipient);
+    }
   }, []);
 
   useEffect(() => {
@@ -1058,7 +1098,7 @@ export function Chat({
       : null,
     fetcher
   );
-  const workflowAgentOptions = workflowAgentsData?.agents ?? [];
+  const _workflowAgentOptions = workflowAgentsData?.agents ?? [];
 
   const [isDragging, setIsDragging] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
@@ -1091,7 +1131,9 @@ export function Chat({
     e.stopPropagation();
     setIsDragging(false);
 
-    if (isReadonly) return;
+    if (isReadonly) {
+      return;
+    }
 
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
@@ -1115,13 +1157,19 @@ export function Chat({
     formData.append("entityKind", dropEntityKind);
     if (dropEntityKind === "business") {
       const bn = dropBusinessName.trim();
-      if (bn.length > 0) formData.append("entityName", bn);
+      if (bn.length > 0) {
+        formData.append("entityName", bn);
+      }
     }
     if (effectiveDocType === "invoice") {
       const sender = invoiceSender.trim();
       const recipient = invoiceRecipient.trim();
-      if (sender) formData.append("invoiceSender", sender);
-      if (recipient) formData.append("invoiceRecipient", recipient);
+      if (sender) {
+        formData.append("invoiceSender", sender);
+      }
+      if (recipient) {
+        formData.append("invoiceRecipient", recipient);
+      }
     }
     if (selectedProjectId) {
       formData.append("projectId", selectedProjectId);
@@ -1306,7 +1354,7 @@ export function Chat({
                   page first.
                 </div>
               )}
-              {folderSyncStatus && folderSyncStatus.synced && (
+              {folderSyncStatus?.synced && (
                 <div className="px-1 text-muted-foreground text-xs">
                   {folderSyncStatus.count} file
                   {folderSyncStatus.count !== 1 ? "s" : ""} from this folder

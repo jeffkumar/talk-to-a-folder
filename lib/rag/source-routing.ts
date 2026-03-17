@@ -22,8 +22,12 @@ export function namespacesForSourceTypes(
   const namespaces: string[] = [];
 
   for (const type of requested) {
-    if (type === "docs") namespaces.push(docsNs);
-    if (type === "tasks") namespaces.push(tasksNs);
+    if (type === "docs") {
+      namespaces.push(docsNs);
+    }
+    if (type === "tasks") {
+      namespaces.push(tasksNs);
+    }
   }
 
   if (namespaces.length === 0) {
@@ -36,8 +40,11 @@ export function namespacesForSourceTypes(
 export function inferSourceTypeFromNamespace(
   namespace: string
 ): SourceType | null {
-  if (namespace.endsWith("_docs") || namespace.endsWith("_docsv2"))
+  if (namespace.endsWith("_docs") || namespace.endsWith("_docsv2")) {
     return "docs";
-  if (namespace.endsWith("_tasksv1")) return "tasks";
+  }
+  if (namespace.endsWith("_tasksv1")) {
+    return "tasks";
+  }
   return null;
 }

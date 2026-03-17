@@ -85,7 +85,9 @@ export function EditableDoc({ docId }: { docId: string }) {
   }, [data]);
 
   const handleSave = useCallback(async () => {
-    if (!selectedProjectId || isSaving) return;
+    if (!selectedProjectId || isSaving) {
+      return;
+    }
 
     setIsSaving(true);
     if (data?.doc.isMicrosoftDoc) {

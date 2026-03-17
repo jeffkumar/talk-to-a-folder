@@ -5,7 +5,6 @@ import {
   AlertCircle,
   Calendar,
   CheckCircle2,
-  ChevronDown,
   Circle,
   Clock,
   ExternalLink,
@@ -148,7 +147,9 @@ export function TasksViewer() {
     .map((m) => ({ userId: m.userId, email: m.email }));
 
   const handleCreateTask = async () => {
-    if (!selectedProjectId || !newTaskTitle.trim()) return;
+    if (!selectedProjectId || !newTaskTitle.trim()) {
+      return;
+    }
 
     setIsCreating(true);
     try {
@@ -193,7 +194,9 @@ export function TasksViewer() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      return;
+    }
 
     const deletePromise = fetch(
       `/api/projects/${selectedProjectId}/tasks/${taskId}`,
@@ -217,7 +220,9 @@ export function TasksViewer() {
   };
 
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -247,9 +252,12 @@ export function TasksViewer() {
 
   // Apply filters
   const filteredTasks = tasks.filter((task) => {
-    if (statusFilter !== "all" && task.status !== statusFilter) return false;
-    if (priorityFilter !== "all" && task.priority !== priorityFilter)
+    if (statusFilter !== "all" && task.status !== statusFilter) {
       return false;
+    }
+    if (priorityFilter !== "all" && task.priority !== priorityFilter) {
+      return false;
+    }
     return true;
   });
 
@@ -426,10 +434,12 @@ export function TasksViewer() {
         <ScrollArea className="h-[60vh]">
           <div className="space-y-6 p-4">
             {Object.entries(tasksByStatus).map(([status, statusTasks]) => {
-              if (statusTasks.length === 0 && statusFilter !== "all")
+              if (statusTasks.length === 0 && statusFilter !== "all") {
                 return null;
-              if (statusTasks.length === 0 && statusFilter === "all")
+              }
+              if (statusTasks.length === 0 && statusFilter === "all") {
                 return null;
+              }
 
               const config = STATUS_CONFIG[status as TaskStatus];
               const StatusIcon = config.icon;

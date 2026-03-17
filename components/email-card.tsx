@@ -93,7 +93,9 @@ export function createGmailUrl(email: ParsedEmail): string {
   const params = new URLSearchParams();
   params.set("view", "cm");
   params.set("fs", "1");
-  if (email.to) params.set("to", email.to);
+  if (email.to) {
+    params.set("to", email.to);
+  }
   params.set("su", email.subject);
   params.set("body", email.body);
   return `https://mail.google.com/mail/?${params.toString()}`;
@@ -103,7 +105,9 @@ export function createOutlookUrl(email: ParsedEmail): string {
   const params = new URLSearchParams();
   params.set("subject", email.subject);
   params.set("body", email.body);
-  if (email.to) params.set("to", email.to);
+  if (email.to) {
+    params.set("to", email.to);
+  }
   return `https://outlook.live.com/mail/0/deeplink/compose?${params.toString()}`;
 }
 
@@ -243,7 +247,7 @@ export function EmailCard({ content, className }: EmailCardProps) {
               <Copy className="size-4" />
             )}
             {isMobile && (
-              <span className="text-xs ml-1">{copied ? "Copied" : "Copy"}</span>
+              <span className="ml-1 text-xs">{copied ? "Copied" : "Copy"}</span>
             )}
           </button>
           {!isMobile && (

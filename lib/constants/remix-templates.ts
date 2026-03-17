@@ -1,5 +1,3 @@
-import type { LucideIcon } from "lucide-react";
-
 export type RemixTemplateId =
   | "product_build_plan"
   | "next_steps"

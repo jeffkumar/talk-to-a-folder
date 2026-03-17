@@ -23,9 +23,13 @@ function uniqueStrings(values: string[]): string[] {
   const seen = new Set<string>();
   for (const value of values) {
     const v = value.trim();
-    if (v.length === 0) continue;
+    if (v.length === 0) {
+      continue;
+    }
     const key = v.toLowerCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      continue;
+    }
     seen.add(key);
     out.push(v);
   }
@@ -85,7 +89,9 @@ export function BusinessNameTypeahead({
             setOpen(true);
           }}
           onFocus={() => {
-            if (value.length >= 2) setOpen(true);
+            if (value.length >= 2) {
+              setOpen(true);
+            }
           }}
           placeholder={placeholder}
           value={value}

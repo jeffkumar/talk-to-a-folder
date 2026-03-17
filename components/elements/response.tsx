@@ -26,7 +26,7 @@ export const Response = memo(
       children,
       ...rest
     }: ComponentProps<"a">) => {
-      const childrenText =
+      const _childrenText =
         typeof children === "string"
           ? children
           : Array.isArray(children)

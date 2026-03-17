@@ -57,7 +57,9 @@ export function IntegrationsHeader() {
   }, [selectedProjectId]);
 
   useEffect(() => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      return;
+    }
     writeIgnoredDocIdsForProject(selectedProjectId, ignoredDocIds);
   }, [ignoredDocIds, selectedProjectId]);
 

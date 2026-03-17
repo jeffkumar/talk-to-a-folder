@@ -16,7 +16,9 @@ type EmbeddingsProvider = "auto" | "openai" | "baseten";
 function getEmbeddingsProviderFromEnv(): EmbeddingsProvider {
   const raw = process.env.EMBEDDINGS_PROVIDER;
   const value = raw?.trim().toLowerCase();
-  if (!value) return "openai";
+  if (!value) {
+    return "openai";
+  }
   if (value === "auto" || value === "openai" || value === "baseten") {
     return value;
   }
@@ -328,9 +330,15 @@ export function formatRetrievedContext(rows: TurbopufferRow[]): string {
       const ts = typeof row.ts === "string" ? row.ts : "";
 
       const headerParts: string[] = [];
-      if (channelName) headerParts.push(`#${channelName}`);
-      if (userName) headerParts.push(userName);
-      if (ts) headerParts.push(`ts=${ts}`);
+      if (channelName) {
+        headerParts.push(`#${channelName}`);
+      }
+      if (userName) {
+        headerParts.push(userName);
+      }
+      if (ts) {
+        headerParts.push(`ts=${ts}`);
+      }
 
       const header =
         headerParts.length > 0

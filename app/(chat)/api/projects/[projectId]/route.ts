@@ -128,13 +128,22 @@ export async function PUT(
       return NextResponse.json({ noteLabels: mergedLabels });
     }
 
-    const { defaultEmailAgentId } = body as { defaultEmailAgentId?: string | null };
+    const { defaultEmailAgentId } = body as {
+      defaultEmailAgentId?: string | null;
+    };
     if (defaultEmailAgentId !== undefined) {
-      const project = await getProjectByIdForUser({ projectId, userId: session.user.id });
+      const project = await getProjectByIdForUser({
+        projectId,
+        userId: session.user.id,
+      });
       if (!project) {
-        return NextResponse.json({ error: "Project not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Project not found" },
+          { status: 404 }
+        );
       }
-      const existingMetadata = (project.metadata as Record<string, unknown>) ?? {};
+      const existingMetadata =
+        (project.metadata as Record<string, unknown>) ?? {};
       await updateProjectMetadata({
         projectId,
         metadata: { ...existingMetadata, defaultEmailAgentId },
@@ -205,10 +214,14 @@ export async function DELETE(
 
     await Promise.all(
       namespaces.map(async (namespace) => {
-        if (!namespace) return;
+        if (!namespace) {
+          return;
+        }
         try {
           const inferredSourceType = inferSourceTypeFromNamespace(namespace);
-          if (!inferredSourceType) return;
+          if (!inferredSourceType) {
+            return;
+          }
           await deleteByFilterFromTurbopuffer({
             namespace,
             // Avoid `null` comparisons (Turbopuffer FiltersInput rejects them).

@@ -158,23 +158,27 @@ export function RemixSheet({
     const contextIds = new Set(contextDocs.map((d) => d.id));
     const searchLower = docSearchQuery.toLowerCase().trim();
     return availableDocs.filter((d) => {
-      if (contextIds.has(d.id)) return false;
-      // Filter by search query
-      if (searchLower && !d.name.toLowerCase().includes(searchLower))
+      if (contextIds.has(d.id)) {
         return false;
+      }
+      // Filter by search query
+      if (searchLower && !d.name.toLowerCase().includes(searchLower)) {
+        return false;
+      }
       // Filter by label (only for notes)
       if (
         docType === "notes" &&
         filterLabelName &&
         !d.labels?.some((l) => l.name === filterLabelName)
-      )
+      ) {
         return false;
+      }
       return true;
     });
   }, [availableDocs, contextDocs, docSearchQuery, filterLabelName, docType]);
 
   // Stable key for initial docIds to detect changes
-  const initialDocIdsKey = initialDocIds.join(",");
+  const _initialDocIdsKey = initialDocIds.join(",");
 
   // Reset state when sheet opens with new docs
   useEffect(() => {
@@ -193,7 +197,7 @@ export function RemixSheet({
       setAddDocOpen(false);
       setIsCopied(false);
     }
-  }, [open, initialDocIdsKey, initialDocIds, initialDocNames]);
+  }, [open, initialDocIds, initialDocNames]);
 
   // Derived arrays for API calls
   const docIds = contextDocs.map((d) => d.id);
@@ -212,11 +216,15 @@ export function RemixSheet({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [generatedContent, streamingContent]);
+  }, []);
 
   const handleGenerate = useCallback(async () => {
-    if (!selectedTemplate || !selectedProjectId || isGenerating) return;
-    if (selectedTemplate === "custom" && !customInstructions.trim()) return;
+    if (!selectedTemplate || !selectedProjectId || isGenerating) {
+      return;
+    }
+    if (selectedTemplate === "custom" && !customInstructions.trim()) {
+      return;
+    }
 
     setIsGenerating(true);
     setStreamingContent("");
@@ -247,7 +255,9 @@ export function RemixSheet({
       if (reader) {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            break;
+          }
 
           const chunk = decoder.decode(value);
           const lines = chunk.split("\n");
@@ -292,7 +302,9 @@ export function RemixSheet({
   ]);
 
   const handleCopy = useCallback(async () => {
-    if (!generatedContent) return;
+    if (!generatedContent) {
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(generatedContent);
@@ -305,7 +317,9 @@ export function RemixSheet({
   }, [generatedContent]);
 
   const handleSaveAsNote = useCallback(async () => {
-    if (!generatedContent || !selectedProjectId || isSaving) return;
+    if (!generatedContent || !selectedProjectId || isSaving) {
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -348,7 +362,9 @@ export function RemixSheet({
   }, [generatedContent, selectedProjectId, selectedTemplate, isSaving]);
 
   const handleSaveToChat = useCallback(async () => {
-    if (!generatedContent || !selectedProjectId || isSavingToChat) return;
+    if (!generatedContent || !selectedProjectId || isSavingToChat) {
+      return;
+    }
 
     setIsSavingToChat(true);
     try {
@@ -614,7 +630,9 @@ export function RemixSheet({
                       const categoryTemplates = REMIX_TEMPLATES.filter(
                         (t) => t.category === category
                       );
-                      if (categoryTemplates.length === 0) return null;
+                      if (categoryTemplates.length === 0) {
+                        return null;
+                      }
                       return (
                         <div key={category}>
                           <div className="mb-2 font-medium text-muted-foreground text-xs uppercase tracking-wide">

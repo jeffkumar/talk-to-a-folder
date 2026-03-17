@@ -7,9 +7,13 @@ const RANGE_PRESET_STORAGE_KEY = "synergy_retrieval_range_preset";
 const SETTINGS_CHANGED_EVENT = "synergy:retrieval-settings-changed";
 
 function readJson<T>(key: string): T | null {
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined") {
+    return null;
+  }
   const raw = localStorage.getItem(key);
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
   try {
     return JSON.parse(raw) as T;
   } catch {
@@ -18,7 +22,9 @@ function readJson<T>(key: string): T | null {
 }
 
 function writeJson(key: string, value: unknown) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") {
+    return;
+  }
   try {
     localStorage.setItem(key, JSON.stringify(value));
     window.dispatchEvent(
@@ -45,7 +51,9 @@ function readRangePresetFromStorage(): RetrievalRangePreset | null {
 
 export function useRetrievalSettings() {
   const subscribe = useCallback((onStoreChange: () => void) => {
-    if (typeof window === "undefined") return () => {};
+    if (typeof window === "undefined") {
+      return () => {};
+    }
 
     const onSettingsChanged = (event: Event) => {
       const custom = event as CustomEvent<{ key?: unknown }>;

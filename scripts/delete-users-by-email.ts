@@ -22,8 +22,8 @@ import {
   stream,
   suggestion,
   task,
-  user,
   usageLog,
+  user,
   vote,
   waitlistRequest,
 } from "../lib/db/schema";
@@ -44,7 +44,9 @@ const db = drizzle(client);
 
 const emailsToDelete = process.argv.slice(2).map((e) => e.trim().toLowerCase());
 if (emailsToDelete.length === 0) {
-  console.error("Usage: npx tsx scripts/delete-users-by-email.ts <email1> [email2 ...]");
+  console.error(
+    "Usage: npx tsx scripts/delete-users-by-email.ts <email1> [email2 ...]"
+  );
   process.exit(1);
 }
 
@@ -54,7 +56,12 @@ async function deleteUsersByEmail() {
   const usersToDelete = await db
     .select({ id: user.id, email: user.email })
     .from(user)
-    .where(sql`LOWER(${user.email}) IN (${sql.join(emailsToDelete.map((e) => sql`${e}`), sql`, `)})`);
+    .where(
+      sql`LOWER(${user.email}) IN (${sql.join(
+        emailsToDelete.map((e) => sql`${e}`),
+        sql`, `
+      )})`
+    );
 
   if (usersToDelete.length === 0) {
     console.log("No matching users found.");
@@ -65,7 +72,10 @@ async function deleteUsersByEmail() {
   const userIds = usersToDelete.map((u) => u.id);
   const emailsExact = usersToDelete.map((u) => u.email);
 
-  console.log(`Found ${usersToDelete.length} user(s) to delete:`, usersToDelete.map((u) => u.email));
+  console.log(
+    `Found ${usersToDelete.length} user(s) to delete:`,
+    usersToDelete.map((u) => u.email)
+  );
 
   const chats = await db
     .select({ id: chat.id })
@@ -84,7 +94,9 @@ async function deleteUsersByEmail() {
     .from(document)
     .where(inArray(document.userId, userIds));
 
-  console.log(`  Chats: ${chatIds.length}, Projects: ${projectIds.length}, Documents: ${documents.length}`);
+  console.log(
+    `  Chats: ${chatIds.length}, Projects: ${projectIds.length}, Documents: ${documents.length}`
+  );
 
   if (chatIds.length > 0) {
     await db.delete(usageLog).where(inArray(usageLog.chatId, chatIds));
@@ -112,7 +124,9 @@ async function deleteUsersByEmail() {
 
   if (projectIds.length > 0) {
     await db.delete(task).where(inArray(task.projectId, projectIds));
-    await db.delete(projectDoc).where(inArray(projectDoc.projectId, projectIds));
+    await db
+      .delete(projectDoc)
+      .where(inArray(projectDoc.projectId, projectIds));
   }
   await db.delete(task).where(inArray(task.assigneeId, userIds));
   await db.delete(projectUser).where(inArray(projectUser.userId, userIds));
@@ -123,9 +137,15 @@ async function deleteUsersByEmail() {
     await db.delete(project).where(inArray(project.id, projectIds));
   }
 
-  await db.delete(feedbackRequest).where(inArray(feedbackRequest.userId, userIds));
-  await db.delete(integrationConnection).where(inArray(integrationConnection.userId, userIds));
-  await db.delete(passwordResetToken).where(inArray(passwordResetToken.userId, userIds));
+  await db
+    .delete(feedbackRequest)
+    .where(inArray(feedbackRequest.userId, userIds));
+  await db
+    .delete(integrationConnection)
+    .where(inArray(integrationConnection.userId, userIds));
+  await db
+    .delete(passwordResetToken)
+    .where(inArray(passwordResetToken.userId, userIds));
   for (const e of emailsExact) {
     await db.delete(waitlistRequest).where(eq(waitlistRequest.email, e));
   }
@@ -135,7 +155,10 @@ async function deleteUsersByEmail() {
     .where(inArray(user.id, userIds))
     .returning({ email: user.email });
 
-  console.log(`\nDeleted ${deleted.length} user(s):`, deleted.map((r) => r.email).join(", "));
+  console.log(
+    `\nDeleted ${deleted.length} user(s):`,
+    deleted.map((r) => r.email).join(", ")
+  );
   await client.end();
   console.log("Done.");
 }

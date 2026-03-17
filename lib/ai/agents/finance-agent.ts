@@ -82,7 +82,9 @@ const monthMap: Record<string, number> = {
 
 function inferYear(text: string, fallback: number) {
   const m = text.match(/\b(19\d{2}|20\d{2})\b/);
-  if (!m) return fallback;
+  if (!m) {
+    return fallback;
+  }
   const y = Number(m[1]);
   return Number.isFinite(y) && y >= 1900 && y <= 2200 ? y : fallback;
 }
@@ -96,14 +98,19 @@ function toYmd(y: number, m: number, d: number) {
 
 function addDaysIso(ymd: string, days: number) {
   const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
   const y = Number(m[1]);
   const mo = Number(m[2]);
   const d = Number(m[3]);
-  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d))
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) {
     return null;
+  }
   const dt = new Date(Date.UTC(y, mo - 1, d));
-  if (Number.isNaN(dt.getTime())) return null;
+  if (Number.isNaN(dt.getTime())) {
+    return null;
+  }
   dt.setUTCDate(dt.getUTCDate() + days);
   return toYmd(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
 }
@@ -126,23 +133,26 @@ function inferDateRange(
     const start = iso[0];
     const endInclusive = iso[1];
     const endExclusive = addDaysIso(endInclusive, 1);
-    if (endExclusive)
+    if (endExclusive) {
       return {
         date_start: start,
         date_end: endExclusive,
         label: `${start}..${endInclusive}`,
       };
+    }
   }
 
   // Month name(s) range: "June and August 2025" => 2025-06-01..2025-09-01
   const months: number[] = [];
   for (const [k, v] of Object.entries(monthMap)) {
-    if (textLower.includes(k) && !months.includes(v)) months.push(v);
+    if (textLower.includes(k) && !months.includes(v)) {
+      months.push(v);
+    }
   }
   months.sort((a, b) => a - b);
   if (months.length >= 2) {
     const startM = months[0];
-    const endM = months[months.length - 1];
+    const endM = months.at(-1);
     const start = toYmd(year, startM, 1);
     const endYear = endM === 12 ? year + 1 : year;
     const endMonth = endM === 12 ? 1 : endM + 1;
@@ -184,12 +194,18 @@ function inferEntity(
   const hintedKind = hint?.entity_kind;
   const hintedName =
     typeof hint?.entity_name === "string" ? hint.entity_name.trim() : "";
-  if (hintedKind === "personal") return { kind: "personal", name: null };
-  if (hintedKind === "business")
+  if (hintedKind === "personal") {
+    return { kind: "personal", name: null };
+  }
+  if (hintedKind === "business") {
     return { kind: "business", name: hintedName || null };
-  if (textLower.includes("personal")) return { kind: "personal", name: null };
-  if (textLower.includes("business"))
+  }
+  if (textLower.includes("personal")) {
+    return { kind: "personal", name: null };
+  }
+  if (textLower.includes("business")) {
     return { kind: "business", name: hintedName || null };
+  }
   return { kind: null, name: hintedName || null };
 }
 
@@ -209,18 +225,28 @@ function inferDocType(textLower: string): "cc_statement" | "bank_statement" {
 function inferCategory(textLower: string): string | null {
   // Return a substring used for category_contains (ILIKE) so it matches detailed categories
   // like "Merchandise & Supplies-Groceries".
-  if (textLower.includes("grocery") || textLower.includes("groceries"))
+  if (textLower.includes("grocery") || textLower.includes("groceries")) {
     return "groc";
-  if (textLower.includes("travel")) return "travel";
-  if (textLower.includes("gas") || textLower.includes("fuel")) return "fuel";
-  if (textLower.includes("subscription")) return "subscription";
-  if (textLower.includes("coffee")) return "coffee";
+  }
+  if (textLower.includes("travel")) {
+    return "travel";
+  }
+  if (textLower.includes("gas") || textLower.includes("fuel")) {
+    return "fuel";
+  }
+  if (textLower.includes("subscription")) {
+    return "subscription";
+  }
+  if (textLower.includes("coffee")) {
+    return "coffee";
+  }
   if (
     textLower.includes("dining") ||
     textLower.includes("restaurant") ||
     textLower.includes("food")
-  )
+  ) {
     return "restaurant";
+  }
   return null;
 }
 
@@ -230,21 +256,33 @@ function inferCategoryFromContext(context: string): string | null {
   const m = lower.match(
     /category_contains["']?\s*[:=]\s*["']([a-z]{3,20})["']/
   );
-  if (m?.[1]) return m[1];
+  if (m?.[1]) {
+    return m[1];
+  }
   const paren = lower.match(
     /\((coffee|groc|travel|fuel|subscription|restaurant)\)/
   );
-  if (paren?.[1]) return paren[1];
+  if (paren?.[1]) {
+    return paren[1];
+  }
   // Or a category table row like "| coffee |"
   const table = lower.match(
     /\|\s*(coffee|groceries|travel|gas|subscriptions?|restaurant)\s*\|/
   );
   if (table?.[1]) {
     const v = table[1];
-    if (v.startsWith("groc")) return "groc";
-    if (v.startsWith("sub")) return "subscription";
-    if (v.startsWith("rest")) return "restaurant";
-    if (v === "gas") return "fuel";
+    if (v.startsWith("groc")) {
+      return "groc";
+    }
+    if (v.startsWith("sub")) {
+      return "subscription";
+    }
+    if (v.startsWith("rest")) {
+      return "restaurant";
+    }
+    if (v === "gas") {
+      return "fuel";
+    }
     return v;
   }
   return null;
@@ -263,9 +301,13 @@ function wantsList(textLower: string) {
 
 function inferTopN(textLower: string): number | null {
   const m = textLower.match(/\btop\s+(\d{1,2})\b/);
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
   const n = Number(m[1]);
-  if (!Number.isFinite(n) || n <= 0) return null;
+  if (!Number.isFinite(n) || n <= 0) {
+    return null;
+  }
   return Math.min(50, n);
 }
 
@@ -282,11 +324,14 @@ function toGfmTable(
 }
 
 function coerceNonNegativeNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value))
+  if (typeof value === "number" && Number.isFinite(value)) {
     return Math.max(0, value);
+  }
   if (typeof value === "string" && value.trim().length > 0) {
     const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) return Math.max(0, parsed);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, parsed);
+    }
   }
   return null;
 }
@@ -311,7 +356,9 @@ function buildChartPayload({
   const out: Array<{ label: string; value: number; count?: number }> = [];
 
   for (const r of rows.slice(0, 250)) {
-    if (!r || typeof r !== "object") continue;
+    if (!r || typeof r !== "object") {
+      continue;
+    }
     const rec = r as Record<string, unknown>;
 
     const rawLabel = rec[labelKey];
@@ -326,7 +373,9 @@ function buildChartPayload({
     const value = coerceNonNegativeNumber(
       typeof rawTotal === "string" ? rawTotal.replace(/^-/, "") : rawTotal
     );
-    if (value === null) continue;
+    if (value === null) {
+      continue;
+    }
 
     const count =
       typeof rec.count === "number" &&
@@ -342,7 +391,9 @@ function buildChartPayload({
     });
   }
 
-  if (out.length === 0) return null;
+  if (out.length === 0) {
+    return null;
+  }
 
   out.sort((a, b) => b.value - a.value);
 
@@ -355,12 +406,16 @@ function buildChartPayload({
   };
 }
 
-function entityLabel(entity: {
+function _entityLabel(entity: {
   kind: "personal" | "business" | null;
   name: string | null;
 }) {
-  if (entity.kind === "personal") return "Personal";
-  if (entity.kind === "business") return entity.name || "Business";
+  if (entity.kind === "personal") {
+    return "Personal";
+  }
+  if (entity.kind === "business") {
+    return entity.name || "Business";
+  }
   return "Unknown";
 }
 
@@ -738,7 +793,7 @@ export async function runFinanceAgent({
     if (matchedFromText) {
       entity.name = matchedFromText;
     }
-    if (entity.name && entity.name.trim()) {
+    if (entity.name?.trim()) {
       // proceed
     } else {
       return SpecialistAgentResponseSchema.parse({
@@ -1028,14 +1083,16 @@ export async function runFinanceAgent({
               ).toFixed(2);
               existing.count = (existing.count || 0) + (row.count || 0);
               // Remove 'amount' field if it exists to avoid confusion
-              if (existing.amount) delete existing.amount;
+              if (existing.amount) {
+                existing.amount = undefined;
+              }
             } else {
               const normalizedRow = { ...row };
               if (normalizedRow.amount) {
                 normalizedRow.total = Number.parseFloat(
                   normalizedRow.amount
                 ).toFixed(2);
-                delete normalizedRow.amount;
+                normalizedRow.amount = undefined;
               } else if (normalizedRow.total) {
                 normalizedRow.total = Number.parseFloat(
                   normalizedRow.total
@@ -1121,7 +1178,9 @@ export async function runFinanceAgent({
     const table = chartPayload
       ? ""
       : (() => {
-          if (rows.length === 0) return "";
+          if (rows.length === 0) {
+            return "";
+          }
           if (qLower.includes("by month")) {
             return toGfmTable(
               ["Month", "Total", "Transactions"],

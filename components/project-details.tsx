@@ -49,7 +49,7 @@ function formatProjectDate(value: unknown) {
   return "—";
 }
 
-function tailWithEllipsis(value: string, tailChars = 16) {
+function _tailWithEllipsis(value: string, tailChars = 16) {
   if (value.length <= tailChars) {
     return value;
   }
@@ -127,7 +127,9 @@ export function ProjectDetails({
   };
 
   const handleSaveName = async () => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      return;
+    }
 
     const trimmedName = editedName.trim();
     if (trimmedName.length === 0) {
@@ -161,7 +163,9 @@ export function ProjectDetails({
   };
 
   const handleDeleteProject = async () => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      return;
+    }
 
     setIsDeleting(true);
     try {

@@ -39,12 +39,14 @@ const PROJECT_COLORS = [
 ];
 
 function getProjectColor(projectId: string | null): string {
-  if (!projectId) return "text-muted-foreground";
+  if (!projectId) {
+    return "text-muted-foreground";
+  }
   let hash = 0;
   for (let i = 0; i < projectId.length; i++) {
     const char = projectId.charCodeAt(i);
     hash = (hash << 5) - hash + char;
-    hash = hash & hash;
+    hash &= hash;
   }
   return PROJECT_COLORS[Math.abs(hash) % PROJECT_COLORS.length];
 }

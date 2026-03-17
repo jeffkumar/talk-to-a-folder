@@ -38,8 +38,6 @@ import {
   type Project,
   type ProjectDoc,
   type ProjectIntegrationSource,
-  type ProjectInvitation,
-  type ProjectUser,
   passwordResetToken,
   project,
   projectDoc,
@@ -80,8 +78,12 @@ export async function getProjectRole({
       .where(eq(project.id, projectId))
       .limit(1);
 
-    if (!owned) return null;
-    if (owned.createdBy === userId) return "owner";
+    if (!owned) {
+      return null;
+    }
+    if (owned.createdBy === userId) {
+      return "owner";
+    }
 
     const [membership] = await db
       .select({ role: projectUser.role })
@@ -156,7 +158,9 @@ export async function getProjectMembers({
       .where(eq(project.id, projectId))
       .limit(1);
 
-    if (!proj) return [];
+    if (!proj) {
+      return [];
+    }
 
     const members = await db
       .select({
@@ -193,7 +197,9 @@ export async function getProjectMembers({
     ];
 
     for (const m of members) {
-      if (m.userId === proj.ownerId) continue;
+      if (m.userId === proj.ownerId) {
+        continue;
+      }
       rows.push({
         kind: "user",
         userId: m.userId,
@@ -206,7 +212,9 @@ export async function getProjectMembers({
 
     for (const inv of invites) {
       // If someone already signed up and is a member, we prefer the active row.
-      if (inv.email === proj.ownerEmail) continue;
+      if (inv.email === proj.ownerEmail) {
+        continue;
+      }
       rows.push({
         kind: "invite",
         email: inv.email,
@@ -473,7 +481,6 @@ if (process.env.NODE_ENV !== "production") {
   // Log which database mode is active (only once per process)
   if (!globalCache.__flowchat_db_logged__) {
     globalCache.__flowchat_db_logged__ = true;
-    // biome-ignore lint/suspicious/noConsole: Dev startup log
     console.log(
       `[DB] Using ${useLocalDb ? "LOCAL" : "NEON"} database${useLocalDb ? ` (${localPostgresUrl.replace(/:[^:@]*@/, ":***@")})` : ""}`
     );
@@ -799,12 +806,12 @@ export async function rejectWaitlistRequest({
 
 export async function isPilotUser(userId: string): Promise<boolean> {
   try {
-    const user = await getUserById(userId);
-    if (!user) {
+    const foundUser = await getUserById(userId);
+    if (!foundUser) {
       return false;
     }
 
-    const waitlist = await getWaitlistRequestByEmail(user.email);
+    const waitlist = await getWaitlistRequestByEmail(foundUser.email);
     if (!waitlist) {
       return false;
     }
@@ -842,7 +849,7 @@ export async function updateWaitlistRequestNotes({
 
 export async function upgradeUserFromWaitlist({
   id,
-  upgradedBy,
+  upgradedBy: _upgradedBy,
 }: {
   id: string;
   upgradedBy: string;
@@ -928,14 +935,18 @@ export async function getProjectsByUserId(
 
     // Add owned projects first (they are always "owner" role)
     for (const p of ownedProjects) {
-      if (seen.has(p.id)) continue;
+      if (seen.has(p.id)) {
+        continue;
+      }
       seen.add(p.id);
       allProjects.push({ ...p, role: "owner" });
     }
 
     // Add shared projects with their roles
     for (const p of sharedProjects) {
-      if (seen.has(p.id)) continue;
+      if (seen.has(p.id)) {
+        continue;
+      }
       seen.add(p.id);
       allProjects.push({ ...p, role: p.role });
     }
@@ -972,7 +983,9 @@ export async function getProjectByIdForUser({
       .from(project)
       .where(and(eq(project.id, projectId), eq(project.createdBy, userId)))
       .limit(1);
-    if (owned) return owned;
+    if (owned) {
+      return owned;
+    }
 
     const [shared] = await db
       .select({
@@ -1397,7 +1410,9 @@ export async function deleteProjectDocById({
       .where(eq(projectDoc.id, docId))
       .limit(1);
 
-    if (!doc) return null;
+    if (!doc) {
+      return null;
+    }
 
     const role = await getProjectRole({ projectId: doc.projectId, userId });
     if (!role) {
@@ -1458,7 +1473,9 @@ export async function deleteProjectDocsByProjectId({
         .where(eq(projectDoc.projectId, projectId));
 
       const ids = docIds.map((r) => r.id);
-      if (ids.length === 0) return { deletedCount: 0 };
+      if (ids.length === 0) {
+        return { deletedCount: 0 };
+      }
 
       const invoiceIds = await tx
         .select({ id: invoice.id })
@@ -1534,7 +1551,9 @@ export async function deleteInvoiceLineItemsByDocumentId({
       .from(invoice)
       .where(eq(invoice.documentId, documentId));
     const ids = invoiceIds.map((row) => row.id);
-    if (ids.length === 0) return;
+    if (ids.length === 0) {
+      return;
+    }
     await db
       .delete(invoiceLineItem)
       .where(inArray(invoiceLineItem.invoiceId, ids));
@@ -2398,7 +2417,9 @@ export async function getUsersWithMessageStats(): Promise<
       ) wr ON LOWER(u.email) = wr.email
       ORDER BY "lastActivityAt" DESC NULLS LAST
     `);
-    const rows = Array.isArray(raw) ? raw : (raw as { rows?: unknown[] }).rows ?? [];
+    const rows = Array.isArray(raw)
+      ? raw
+      : ((raw as { rows?: unknown[] }).rows ?? []);
     return (rows as Record<string, unknown>[]).map((r) => {
       const lastActivity =
         r.lastActivityAt ?? (r as Record<string, unknown>).lastactivityat;
@@ -2440,7 +2461,9 @@ export async function getMessagesByDay({
       lte(message.createdAt, toDate),
       eq(message.role, "user"),
     ];
-    if (userId) conditions.push(eq(chat.userId, userId));
+    if (userId) {
+      conditions.push(eq(chat.userId, userId));
+    }
     const rows = await db
       .select({
         date: sql<string>`to_char(date_trunc('day', ${message.createdAt}), 'YYYY-MM-DD')`,
@@ -2499,7 +2522,9 @@ export async function getTokensByDayByUserId({
       gte(usageLog.createdAt, fromDate),
       lte(usageLog.createdAt, toDate),
     ];
-    if (userId) conditions.push(eq(usageLog.userId, userId));
+    if (userId) {
+      conditions.push(eq(usageLog.userId, userId));
+    }
     const rows = await db
       .select({
         date: sql<string>`to_char(date_trunc('day', ${usageLog.createdAt}), 'YYYY-MM-DD')`,
@@ -2684,7 +2709,9 @@ export async function insertFinancialTransactions({
   }>;
 }): Promise<{ insertedCount: number }> {
   try {
-    if (rows.length === 0) return { insertedCount: 0 };
+    if (rows.length === 0) {
+      return { insertedCount: 0 };
+    }
 
     const inserted = await db
       .insert(financialTransaction)
@@ -2853,7 +2880,9 @@ export async function getBusinessEntityNamesForUser({
       const name = (row as { name?: unknown }).name;
       if (typeof name === "string") {
         const trimmed = name.trim();
-        if (trimmed.length > 0) out.push(trimmed);
+        if (trimmed.length > 0) {
+          out.push(trimmed);
+        }
       }
     }
     return out;
@@ -2920,13 +2949,19 @@ export async function getProjectEntitySummaryForUser({
 }
 
 function truncateText(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value;
+  if (value.length <= maxChars) {
+    return value;
+  }
   return `${value.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
 function formatYmd(value: Date | string | null | undefined): string | null {
-  if (!value) return null;
-  if (typeof value === "string") return value;
+  if (!value) {
+    return null;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
   // Date from drizzle date() comes as string (YYYY-MM-DD) typically, but keep safe.
   try {
     const yyyy = value.getUTCFullYear();
@@ -3026,7 +3061,9 @@ export async function getProjectContextSnippetForUser({
     const header = `Project: ${headerProjectName} (${projRow.id})`;
     const entitiesLine = (() => {
       const parts: string[] = [];
-      if (personalPresent) parts.push("Personal");
+      if (personalPresent) {
+        parts.push("Personal");
+      }
       for (const name of Array.from(new Set(businessNames)).sort((a, b) =>
         a.localeCompare(b)
       )) {
@@ -3132,7 +3169,9 @@ export async function insertInvoiceLineItems({
   }>;
 }): Promise<{ insertedCount: number }> {
   try {
-    if (rows.length === 0) return { insertedCount: 0 };
+    if (rows.length === 0) {
+      return { insertedCount: 0 };
+    }
 
     const inserted = await db
       .insert(invoiceLineItem)
@@ -3187,10 +3226,15 @@ export async function getInvoicePartiesByProjectId({
       const recipient =
         typeof row.recipient === "string" ? row.recipient.trim() : "";
 
-      if (sender) senders.add(sender);
-      else if (vendor) senders.add(vendor);
+      if (sender) {
+        senders.add(sender);
+      } else if (vendor) {
+        senders.add(vendor);
+      }
 
-      if (recipient) recipients.add(recipient);
+      if (recipient) {
+        recipients.add(recipient);
+      }
     }
 
     return {
@@ -3230,7 +3274,9 @@ function buildProjectAccessClause(userId: string): SQL {
 }
 
 function buildDocIdFilter(docIds: string[] | undefined) {
-  if (!Array.isArray(docIds) || docIds.length === 0) return null;
+  if (!Array.isArray(docIds) || docIds.length === 0) {
+    return null;
+  }
   return inArray(projectDoc.id, docIds);
 }
 
@@ -3258,18 +3304,23 @@ function buildEntityFilter({
       clauses.push(sql`LOWER(${projectDoc.entityName}) = LOWER(${trimmed})`);
     }
   }
-  if (clauses.length === 0) return null;
+  if (clauses.length === 0) {
+    return null;
+  }
   return and(...clauses);
 }
 
 function buildExcludeCategoriesFilter(excludeCategories: string[] | undefined) {
-  if (!Array.isArray(excludeCategories) || excludeCategories.length === 0)
+  if (!Array.isArray(excludeCategories) || excludeCategories.length === 0) {
     return null;
+  }
   const normalized = excludeCategories
     .map((c) => (typeof c === "string" ? c.trim().slice(0, 64) : ""))
     .filter((c) => c.length > 0)
     .slice(0, 10);
-  if (normalized.length === 0) return null;
+  if (normalized.length === 0) {
+    return null;
+  }
 
   const valuesSql = sql.join(
     normalized.map((c) => sql`${c}`),
@@ -3281,12 +3332,16 @@ function buildExcludeCategoriesFilter(excludeCategories: string[] | undefined) {
 }
 
 function buildCategoriesInFilter(categoriesIn: string[] | undefined) {
-  if (!Array.isArray(categoriesIn) || categoriesIn.length === 0) return null;
+  if (!Array.isArray(categoriesIn) || categoriesIn.length === 0) {
+    return null;
+  }
   const normalized = categoriesIn
     .map((c) => (typeof c === "string" ? c.trim().slice(0, 64) : ""))
     .filter((c) => c.length > 0)
     .slice(0, 10);
-  if (normalized.length === 0) return null;
+  if (normalized.length === 0) {
+    return null;
+  }
 
   const valuesSql = sql.join(
     normalized.map((c) => sql`${c}`),
@@ -3305,7 +3360,9 @@ function buildDateRangeFilter({
   dateEnd?: string;
 }) {
   const clauses: SQL[] = [];
-  if (!dateStart && !dateEnd) return clauses;
+  if (!dateStart && !dateEnd) {
+    return clauses;
+  }
 
   if (documentType === "invoice") {
     if (typeof dateStart === "string") {
@@ -3350,9 +3407,13 @@ function buildVendorContainsFilter({
   documentType: FinanceDocumentType;
   vendorContains?: string;
 }) {
-  if (typeof vendorContains !== "string") return null;
+  if (typeof vendorContains !== "string") {
+    return null;
+  }
   const needle = vendorContains.trim();
-  if (!needle) return null;
+  if (!needle) {
+    return null;
+  }
   const like = `%${needle}%`;
 
   if (documentType === "invoice") {
@@ -3362,17 +3423,25 @@ function buildVendorContainsFilter({
 }
 
 function buildCategoryContainsFilter(categoryContains: string | undefined) {
-  if (typeof categoryContains !== "string") return null;
+  if (typeof categoryContains !== "string") {
+    return null;
+  }
   const needle = categoryContains.trim();
-  if (!needle) return null;
+  if (!needle) {
+    return null;
+  }
   const like = `%${needle}%`;
   return sql`${financialTransaction.category} ILIKE ${like}`;
 }
 
 function buildInvoiceSenderContainsFilter(senderContains: string | undefined) {
-  if (typeof senderContains !== "string") return null;
+  if (typeof senderContains !== "string") {
+    return null;
+  }
   const needle = senderContains.trim();
-  if (!needle) return null;
+  if (!needle) {
+    return null;
+  }
   const like = `%${needle}%`;
   return sql`COALESCE(${invoice.sender}, ${invoice.vendor}) ILIKE ${like}`;
 }
@@ -3380,9 +3449,13 @@ function buildInvoiceSenderContainsFilter(senderContains: string | undefined) {
 function buildInvoiceRecipientContainsFilter(
   recipientContains: string | undefined
 ) {
-  if (typeof recipientContains !== "string") return null;
+  if (typeof recipientContains !== "string") {
+    return null;
+  }
   const needle = recipientContains.trim();
-  if (!needle) return null;
+  if (!needle) {
+    return null;
+  }
   const like = `%${needle}%`;
   return sql`${invoice.recipient} ILIKE ${like}`;
 }
@@ -3435,15 +3508,27 @@ export async function financeSum({
         accessClause,
         eq(projectDoc.documentType, "invoice"),
       ];
-      if (projectScope) whereClauses.push(projectScope);
-      if (docIdFilter) whereClauses.push(docIdFilter);
-      if (entityFilter) whereClauses.push(entityFilter);
-      if (vendorFilter) whereClauses.push(vendorFilter);
-      if (senderFilter) whereClauses.push(senderFilter);
-      if (recipientFilter) whereClauses.push(recipientFilter);
+      if (projectScope) {
+        whereClauses.push(projectScope);
+      }
+      if (docIdFilter) {
+        whereClauses.push(docIdFilter);
+      }
+      if (entityFilter) {
+        whereClauses.push(entityFilter);
+      }
+      if (vendorFilter) {
+        whereClauses.push(vendorFilter);
+      }
+      if (senderFilter) {
+        whereClauses.push(senderFilter);
+      }
+      if (recipientFilter) {
+        whereClauses.push(recipientFilter);
+      }
       whereClauses.push(...dateClauses);
 
-      const [row] = await db
+      const [invoiceRow] = await db
         .select({
           total: sql<string>`COALESCE(SUM(${invoice.total}), 0)::text`.as(
             "total"
@@ -3465,8 +3550,8 @@ export async function financeSum({
       return {
         query_type: "sum" as const,
         document_type: "invoice" as const,
-        total: row?.total ?? "0",
-        count: row?.count ?? 0,
+        total: invoiceRow?.total ?? "0",
+        count: invoiceRow?.count ?? 0,
         provenance: {
           source: "postgres" as const,
           doc_ids: filters?.doc_ids ?? null,
@@ -3478,14 +3563,28 @@ export async function financeSum({
       accessClause,
       eq(projectDoc.documentType, documentType),
     ];
-    if (projectScope) whereClauses.push(projectScope);
-    if (docIdFilter) whereClauses.push(docIdFilter);
-    if (entityFilter) whereClauses.push(entityFilter);
-    if (vendorFilter) whereClauses.push(vendorFilter);
-    if (categoryContains) whereClauses.push(categoryContains);
+    if (projectScope) {
+      whereClauses.push(projectScope);
+    }
+    if (docIdFilter) {
+      whereClauses.push(docIdFilter);
+    }
+    if (entityFilter) {
+      whereClauses.push(entityFilter);
+    }
+    if (vendorFilter) {
+      whereClauses.push(vendorFilter);
+    }
+    if (categoryContains) {
+      whereClauses.push(categoryContains);
+    }
     whereClauses.push(...dateClauses);
-    if (excludeCategories) whereClauses.push(excludeCategories);
-    if (categoriesIn) whereClauses.push(categoriesIn);
+    if (excludeCategories) {
+      whereClauses.push(excludeCategories);
+    }
+    if (categoriesIn) {
+      whereClauses.push(categoriesIn);
+    }
     whereClauses.push(
       ...buildAmountRangeFilter({
         amountMin: filters?.amount_min,
@@ -3496,7 +3595,7 @@ export async function financeSum({
     const whereSql = and(...whereClauses);
     const dedupeKey = sql<string>`COALESCE(${financialTransaction.txnHash}, (${financialTransaction.documentId}::text || '|' || ${financialTransaction.rowHash}))`;
 
-    const [row] = await db.execute(sql`
+    const [txnRow] = await db.execute(sql`
       SELECT
         COALESCE(SUM(t.amount), 0)::text AS total,
         COUNT(*)::int AS count
@@ -3533,8 +3632,8 @@ export async function financeSum({
     return {
       query_type: "sum" as const,
       document_type: documentType,
-      total: row?.total ?? "0",
-      count: row?.count ?? 0,
+      total: txnRow?.total ?? "0",
+      count: txnRow?.count ?? 0,
       supporting_ids: supporting.map((r) => (r as { id: string }).id),
       provenance: {
         source: "postgres" as const,
@@ -3597,12 +3696,24 @@ export async function financeList({
         accessClause,
         eq(projectDoc.documentType, "invoice"),
       ];
-      if (projectScope) whereClauses.push(projectScope);
-      if (docIdFilter) whereClauses.push(docIdFilter);
-      if (entityFilter) whereClauses.push(entityFilter);
-      if (vendorFilter) whereClauses.push(vendorFilter);
-      if (senderFilter) whereClauses.push(senderFilter);
-      if (recipientFilter) whereClauses.push(recipientFilter);
+      if (projectScope) {
+        whereClauses.push(projectScope);
+      }
+      if (docIdFilter) {
+        whereClauses.push(docIdFilter);
+      }
+      if (entityFilter) {
+        whereClauses.push(entityFilter);
+      }
+      if (vendorFilter) {
+        whereClauses.push(vendorFilter);
+      }
+      if (senderFilter) {
+        whereClauses.push(senderFilter);
+      }
+      if (recipientFilter) {
+        whereClauses.push(recipientFilter);
+      }
       whereClauses.push(...dateClauses);
 
       const rows = await db
@@ -3656,14 +3767,28 @@ export async function financeList({
       accessClause,
       eq(projectDoc.documentType, documentType),
     ];
-    if (projectScope) whereClauses.push(projectScope);
-    if (docIdFilter) whereClauses.push(docIdFilter);
-    if (entityFilter) whereClauses.push(entityFilter);
-    if (vendorFilter) whereClauses.push(vendorFilter);
-    if (categoryContains) whereClauses.push(categoryContains);
+    if (projectScope) {
+      whereClauses.push(projectScope);
+    }
+    if (docIdFilter) {
+      whereClauses.push(docIdFilter);
+    }
+    if (entityFilter) {
+      whereClauses.push(entityFilter);
+    }
+    if (vendorFilter) {
+      whereClauses.push(vendorFilter);
+    }
+    if (categoryContains) {
+      whereClauses.push(categoryContains);
+    }
     whereClauses.push(...dateClauses);
-    if (excludeCategories) whereClauses.push(excludeCategories);
-    if (categoriesIn) whereClauses.push(categoriesIn);
+    if (excludeCategories) {
+      whereClauses.push(excludeCategories);
+    }
+    if (categoriesIn) {
+      whereClauses.push(categoriesIn);
+    }
     whereClauses.push(
       ...buildAmountRangeFilter({
         amountMin: filters?.amount_min,
@@ -3778,12 +3903,24 @@ export async function financeGroupByMonth({
         accessClause,
         eq(projectDoc.documentType, "invoice"),
       ];
-      if (projectScope) whereClauses.push(projectScope);
-      if (docIdFilter) whereClauses.push(docIdFilter);
-      if (entityFilter) whereClauses.push(entityFilter);
-      if (vendorFilter) whereClauses.push(vendorFilter);
-      if (senderFilter) whereClauses.push(senderFilter);
-      if (recipientFilter) whereClauses.push(recipientFilter);
+      if (projectScope) {
+        whereClauses.push(projectScope);
+      }
+      if (docIdFilter) {
+        whereClauses.push(docIdFilter);
+      }
+      if (entityFilter) {
+        whereClauses.push(entityFilter);
+      }
+      if (vendorFilter) {
+        whereClauses.push(vendorFilter);
+      }
+      if (senderFilter) {
+        whereClauses.push(senderFilter);
+      }
+      if (recipientFilter) {
+        whereClauses.push(recipientFilter);
+      }
       whereClauses.push(...dateClauses);
 
       const rows = await db
@@ -3823,13 +3960,25 @@ export async function financeGroupByMonth({
       accessClause,
       eq(projectDoc.documentType, documentType),
     ];
-    if (projectScope) whereClauses.push(projectScope);
-    if (docIdFilter) whereClauses.push(docIdFilter);
-    if (entityFilter) whereClauses.push(entityFilter);
-    if (vendorFilter) whereClauses.push(vendorFilter);
-    if (categoryContains) whereClauses.push(categoryContains);
+    if (projectScope) {
+      whereClauses.push(projectScope);
+    }
+    if (docIdFilter) {
+      whereClauses.push(docIdFilter);
+    }
+    if (entityFilter) {
+      whereClauses.push(entityFilter);
+    }
+    if (vendorFilter) {
+      whereClauses.push(vendorFilter);
+    }
+    if (categoryContains) {
+      whereClauses.push(categoryContains);
+    }
     whereClauses.push(...dateClauses);
-    if (excludeCategories) whereClauses.push(excludeCategories);
+    if (excludeCategories) {
+      whereClauses.push(excludeCategories);
+    }
     whereClauses.push(
       ...buildAmountRangeFilter({
         amountMin: filters?.amount_min,
@@ -3928,12 +4077,24 @@ export async function financeGroupByMerchant({
         accessClause,
         eq(projectDoc.documentType, "invoice"),
       ];
-      if (projectScope) whereClauses.push(projectScope);
-      if (docIdFilter) whereClauses.push(docIdFilter);
-      if (entityFilter) whereClauses.push(entityFilter);
-      if (vendorFilter) whereClauses.push(vendorFilter);
-      if (senderFilter) whereClauses.push(senderFilter);
-      if (recipientFilter) whereClauses.push(recipientFilter);
+      if (projectScope) {
+        whereClauses.push(projectScope);
+      }
+      if (docIdFilter) {
+        whereClauses.push(docIdFilter);
+      }
+      if (entityFilter) {
+        whereClauses.push(entityFilter);
+      }
+      if (vendorFilter) {
+        whereClauses.push(vendorFilter);
+      }
+      if (senderFilter) {
+        whereClauses.push(senderFilter);
+      }
+      if (recipientFilter) {
+        whereClauses.push(recipientFilter);
+      }
       whereClauses.push(...dateClauses);
 
       const rows = await db
@@ -3971,14 +4132,28 @@ export async function financeGroupByMerchant({
       accessClause,
       eq(projectDoc.documentType, documentType),
     ];
-    if (projectScope) whereClauses.push(projectScope);
-    if (docIdFilter) whereClauses.push(docIdFilter);
-    if (entityFilter) whereClauses.push(entityFilter);
-    if (vendorFilter) whereClauses.push(vendorFilter);
-    if (categoryContains) whereClauses.push(categoryContains);
+    if (projectScope) {
+      whereClauses.push(projectScope);
+    }
+    if (docIdFilter) {
+      whereClauses.push(docIdFilter);
+    }
+    if (entityFilter) {
+      whereClauses.push(entityFilter);
+    }
+    if (vendorFilter) {
+      whereClauses.push(vendorFilter);
+    }
+    if (categoryContains) {
+      whereClauses.push(categoryContains);
+    }
     whereClauses.push(...dateClauses);
-    if (excludeCategories) whereClauses.push(excludeCategories);
-    if (categoriesIn) whereClauses.push(categoriesIn);
+    if (excludeCategories) {
+      whereClauses.push(excludeCategories);
+    }
+    if (categoriesIn) {
+      whereClauses.push(categoriesIn);
+    }
     whereClauses.push(
       ...buildAmountRangeFilter({
         amountMin: filters?.amount_min,
@@ -4089,14 +4264,28 @@ export async function financeGroupByDescription({
       accessClause,
       eq(projectDoc.documentType, documentType),
     ];
-    if (projectScope) whereClauses.push(projectScope);
-    if (docIdFilter) whereClauses.push(docIdFilter);
-    if (entityFilter) whereClauses.push(entityFilter);
-    if (vendorFilter) whereClauses.push(vendorFilter);
-    if (categoryContains) whereClauses.push(categoryContains);
+    if (projectScope) {
+      whereClauses.push(projectScope);
+    }
+    if (docIdFilter) {
+      whereClauses.push(docIdFilter);
+    }
+    if (entityFilter) {
+      whereClauses.push(entityFilter);
+    }
+    if (vendorFilter) {
+      whereClauses.push(vendorFilter);
+    }
+    if (categoryContains) {
+      whereClauses.push(categoryContains);
+    }
     whereClauses.push(...dateClauses);
-    if (excludeCategories) whereClauses.push(excludeCategories);
-    if (categoriesIn) whereClauses.push(categoriesIn);
+    if (excludeCategories) {
+      whereClauses.push(excludeCategories);
+    }
+    if (categoriesIn) {
+      whereClauses.push(categoriesIn);
+    }
     whereClauses.push(
       ...buildAmountRangeFilter({
         amountMin: filters?.amount_min,
@@ -4205,13 +4394,25 @@ export async function financeGroupByCategory({
       accessClause,
       eq(projectDoc.documentType, documentType),
     ];
-    if (projectScope) whereClauses.push(projectScope);
-    if (docIdFilter) whereClauses.push(docIdFilter);
-    if (entityFilter) whereClauses.push(entityFilter);
-    if (vendorFilter) whereClauses.push(vendorFilter);
-    if (categoryContains) whereClauses.push(categoryContains);
+    if (projectScope) {
+      whereClauses.push(projectScope);
+    }
+    if (docIdFilter) {
+      whereClauses.push(docIdFilter);
+    }
+    if (entityFilter) {
+      whereClauses.push(entityFilter);
+    }
+    if (vendorFilter) {
+      whereClauses.push(vendorFilter);
+    }
+    if (categoryContains) {
+      whereClauses.push(categoryContains);
+    }
     whereClauses.push(...dateClauses);
-    if (excludeCategories) whereClauses.push(excludeCategories);
+    if (excludeCategories) {
+      whereClauses.push(excludeCategories);
+    }
     whereClauses.push(
       ...buildAmountRangeFilter({
         amountMin: filters?.amount_min,
@@ -4497,9 +4698,15 @@ export async function getTasksByProjectId({
 }): Promise<TaskWithAssignee[]> {
   try {
     const conditions = [eq(task.projectId, projectId)];
-    if (status) conditions.push(eq(task.status, status));
-    if (assigneeId) conditions.push(eq(task.assigneeId, assigneeId));
-    if (priority) conditions.push(eq(task.priority, priority));
+    if (status) {
+      conditions.push(eq(task.status, status));
+    }
+    if (assigneeId) {
+      conditions.push(eq(task.assigneeId, assigneeId));
+    }
+    if (priority) {
+      conditions.push(eq(task.priority, priority));
+    }
 
     // Alias for assignee user
     const assigneeUser = db

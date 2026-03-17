@@ -8,7 +8,6 @@ import {
   ContextDocPicker,
 } from "@/components/context-doc-picker";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
@@ -18,6 +17,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import { useProjectSelector } from "@/hooks/use-project-selector";
 import { getRandomThinkingMessage } from "@/lib/ai/messages";
 import type { AgentMode } from "@/lib/ai/models";
@@ -116,8 +116,12 @@ export function InlineQASheet({
 
   const handleSubmit = useCallback(async () => {
     // Use ref for immediate check to prevent double-clicks
-    if (isSubmittingRef.current) return;
-    if (!input.trim() || isStreaming || !selectedProjectId) return;
+    if (isSubmittingRef.current) {
+      return;
+    }
+    if (!input.trim() || isStreaming || !selectedProjectId) {
+      return;
+    }
 
     // Set ref immediately (synchronous) before any state updates
     isSubmittingRef.current = true;
@@ -166,7 +170,9 @@ export function InlineQASheet({
       if (reader) {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            break;
+          }
 
           const chunk = decoder.decode(value);
           const lines = chunk.split("\n");

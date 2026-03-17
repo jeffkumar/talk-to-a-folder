@@ -38,7 +38,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -107,15 +106,25 @@ function isEditableMimeType(mimeType: string): boolean {
 }
 
 function formatDocType(value: string): string {
-  if (value === "bank_statement") return "Bank statement";
-  if (value === "cc_statement") return "CC statement";
-  if (value === "invoice") return "Invoice";
-  if (value === "general_doc") return "General doc";
+  if (value === "bank_statement") {
+    return "Bank statement";
+  }
+  if (value === "cc_statement") {
+    return "CC statement";
+  }
+  if (value === "invoice") {
+    return "Invoice";
+  }
+  if (value === "general_doc") {
+    return "General doc";
+  }
   return value;
 }
 
 function isMicrosoftSourceDoc(doc: ProjectDoc): boolean {
-  if (!ENABLE_MICROSOFT_INTEGRATION) return false;
+  if (!ENABLE_MICROSOFT_INTEGRATION) {
+    return false;
+  }
   const metadata =
     doc.metadata && typeof doc.metadata === "object"
       ? (doc.metadata as Record<string, unknown>)
@@ -175,7 +184,7 @@ export function FilesViewer() {
 
   // State for document type selection dialog
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
-  const [selectedDocType, setSelectedDocType] =
+  const [_selectedDocType, setSelectedDocType] =
     useState<UploadDocumentType>("general_doc");
 
   // Local-only persistence per project.
@@ -188,7 +197,9 @@ export function FilesViewer() {
   }, [selectedProjectId]);
 
   useEffect(() => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      return;
+    }
     writeIgnoredDocIdsForProject(selectedProjectId, ignoredDocIds);
   }, [ignoredDocIds, selectedProjectId]);
 
@@ -241,7 +252,9 @@ export function FilesViewer() {
 
   const currentUserId = session?.user?.id ?? null;
   const role = useMemo(() => {
-    if (!currentUserId) return null;
+    if (!currentUserId) {
+      return null;
+    }
     const row = membersData?.members?.find(
       (m) => m.kind === "user" && m.userId === currentUserId
     );
@@ -432,7 +445,9 @@ export function FilesViewer() {
     }
 
     const files = Array.from(e.dataTransfer.files);
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      return;
+    }
 
     // Stage files and show document type selection dialog
     setStagedFiles(files);
@@ -440,7 +455,9 @@ export function FilesViewer() {
   };
 
   const handleUploadStagedFiles = async (docType: UploadDocumentType) => {
-    if (!selectedProjectId || stagedFiles.length === 0) return;
+    if (!selectedProjectId || stagedFiles.length === 0) {
+      return;
+    }
 
     const filesToUpload = [...stagedFiles];
 
@@ -518,10 +535,15 @@ export function FilesViewer() {
       if (sourceFilter !== "all") {
         const isMicrosoft = isMicrosoftSourceDoc(doc);
         const isGoogle = isGoogleSourceDoc(doc);
-        if (sourceFilter === "microsoft" && !isMicrosoft) return false;
-        if (sourceFilter === "google" && !isGoogle) return false;
-        if (sourceFilter === "uploaded" && (isMicrosoft || isGoogle))
+        if (sourceFilter === "microsoft" && !isMicrosoft) {
           return false;
+        }
+        if (sourceFilter === "google" && !isGoogle) {
+          return false;
+        }
+        if (sourceFilter === "uploaded" && (isMicrosoft || isGoogle)) {
+          return false;
+        }
       }
 
       return true;
@@ -1227,7 +1249,9 @@ export function FilesViewer() {
                   multiple
                   onChange={(e) => {
                     const files = Array.from(e.target.files ?? []);
-                    if (files.length === 0) return;
+                    if (files.length === 0) {
+                      return;
+                    }
 
                     // Stage files and show document type selection dialog
                     setStagedFiles(files);
@@ -1276,7 +1300,9 @@ export function FilesViewer() {
                 multiple
                 onChange={(e) => {
                   const files = Array.from(e.target.files ?? []);
-                  if (files.length === 0) return;
+                  if (files.length === 0) {
+                    return;
+                  }
 
                   // Stage files and show document type selection dialog
                   setStagedFiles(files);

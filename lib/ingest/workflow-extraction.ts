@@ -219,7 +219,9 @@ async function extractLongDocument({
     const end = Math.min(start + chunkSize, rawText.length);
     chunks.push(rawText.slice(start, end));
     start = end - overlap;
-    if (start >= rawText.length) break;
+    if (start >= rawText.length) {
+      break;
+    }
   }
 
   console.info(
@@ -274,8 +276,12 @@ function mergeStructuredData(
   const validData = dataArray.filter(
     (d): d is Record<string, unknown> => d !== null
   );
-  if (validData.length === 0) return null;
-  if (validData.length === 1) return validData[0];
+  if (validData.length === 0) {
+    return null;
+  }
+  if (validData.length === 1) {
+    return validData[0];
+  }
 
   const merged: Record<string, unknown> = {};
 

@@ -65,7 +65,9 @@ function PureMessages({
   >();
 
   useEffect(() => {
-    if (!dataStream?.length) return;
+    if (!dataStream?.length) {
+      return;
+    }
 
     for (let i = dataStream.length - 1; i >= 0; i -= 1) {
       const part = dataStream[i];
@@ -101,8 +103,8 @@ function PureMessages({
               key={message.id}
               message={message}
               onEntitySelection={onEntitySelection}
-              onToggleCitations={onToggleCitations}
               onTimeRangeSelection={onTimeRangeSelection}
+              onToggleCitations={onToggleCitations}
               regenerate={regenerate}
               requiresScrollPadding={
                 hasSentMessage && index === messages.length - 1

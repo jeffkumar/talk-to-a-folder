@@ -28,7 +28,7 @@ const requestSchema = z.object({
     "slides",
     "custom",
   ] as const),
-  customInstructions: z.string().max(10000).optional(),
+  customInstructions: z.string().max(10_000).optional(),
 });
 
 export async function POST(request: Request) {

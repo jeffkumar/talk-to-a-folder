@@ -71,7 +71,7 @@ export const slidesArtifact = new Artifact<"slides", Metadata>({
           const filename = `${slidesData.slides.at(0)?.title?.replaceAll(/[^\d\sA-Za-z-]/g, "") ?? "presentation"}.pdf`;
           downloadSlidesPDF(blob, filename);
           toast.success("PDF downloaded!");
-        } catch (error) {
+        } catch (_error) {
           toast.error("Failed to generate PDF");
         }
       },

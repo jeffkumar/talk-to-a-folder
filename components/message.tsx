@@ -1,13 +1,8 @@
 "use client";
 import type { UseChatHelpers } from "@ai-sdk/react";
 import equal from "fast-deep-equal";
-import {
-  ExternalLink,
-  FileText,
-  Loader2,
-  Maximize2,
-} from "lucide-react";
-import { memo, useEffect, useMemo, useState } from "react";
+import { ExternalLink, FileText, Loader2, Maximize2 } from "lucide-react";
+import { memo, useMemo, useState } from "react";
 import useSWR from "swr";
 import { ChartViewer, safeParseChartPayload } from "@/components/chart-viewer";
 import { EntitySelector } from "@/components/entity-selector";
@@ -34,15 +29,7 @@ import { useDataStream } from "./data-stream-provider";
 import { MessageContent } from "./elements/message";
 import { Response } from "./elements/response";
 import { Source } from "./elements/source";
-import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-  ToolOutput,
-} from "./elements/tool";
 import { EmailCard, looksLikeEmail } from "./email-card";
-import { SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
 import { MessageEditor } from "./message-editor";
 import { MessageReasoning } from "./message-reasoning";
@@ -115,7 +102,9 @@ const PurePreviewMessage = ({
 
   const sources = existingSources;
   const uniqueSources = (() => {
-    if (!sources || sources.length === 0) return [];
+    if (!sources || sources.length === 0) {
+      return [];
+    }
     const seen = new Set<string>();
     const out: RetrievedSource[] = [];
     for (const s of sources) {
@@ -128,7 +117,9 @@ const PurePreviewMessage = ({
         : blobUrl
           ? `${sourceType}:${blobUrl}`
           : `${sourceType}:${filename}`;
-      if (seen.has(key)) continue;
+      if (seen.has(key)) {
+        continue;
+      }
       seen.add(key);
       out.push(s);
     }
@@ -202,7 +193,9 @@ const PurePreviewMessage = ({
                       className="rounded-md border bg-background p-1.5"
                       disabled={isReadonly}
                       onClick={(event) => {
-                        if (isReadonly) return;
+                        if (isReadonly) {
+                          return;
+                        }
                         const rect =
                           event.currentTarget.getBoundingClientRect();
                         setArtifact((current) => ({
@@ -470,22 +463,19 @@ const PurePreviewMessage = ({
                       <HoverCard closeDelay={100} key={i} openDelay={300}>
                         <HoverCardTrigger asChild>
                           <button
-                              className="inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-full border bg-muted/50 px-3 py-1 font-medium text-xs transition-colors hover:bg-muted"
-                              onClick={() => {
-                                if (
-                                  typeof href === "string" &&
-                                  href.length > 0
-                                ) {
-                                  window.open(href, "_blank", "noopener");
-                                }
-                              }}
-                              type="button"
-                            >
-                              <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
-                              <span className="block max-w-[240px] truncate">
-                                {displayLabel}
-                              </span>
-                            </button>
+                            className="inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-full border bg-muted/50 px-3 py-1 font-medium text-xs transition-colors hover:bg-muted"
+                            onClick={() => {
+                              if (typeof href === "string" && href.length > 0) {
+                                window.open(href, "_blank", "noopener");
+                              }
+                            }}
+                            type="button"
+                          >
+                            <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            <span className="block max-w-[240px] truncate">
+                              {displayLabel}
+                            </span>
+                          </button>
                         </HoverCardTrigger>
                         <HoverCardContent
                           align="start"

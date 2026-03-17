@@ -24,7 +24,9 @@ export function useUploadNotifications() {
 
   // Start polling when we have pending uploads
   const startPolling = useCallback(() => {
-    if (pollIntervalRef.current) return;
+    if (pollIntervalRef.current) {
+      return;
+    }
 
     pollIntervalRef.current = setInterval(async () => {
       if (pendingUploads.size === 0) {
@@ -41,7 +43,9 @@ export function useUploadNotifications() {
           const response = await fetch(
             `/api/projects/${upload.projectId}/docs/${docId}/status`
           );
-          if (!response.ok) continue;
+          if (!response.ok) {
+            continue;
+          }
 
           const data = (await response.json()) as { parseStatus?: string };
           const status = data.parseStatus;

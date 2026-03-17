@@ -39,7 +39,9 @@ function hasMicrosoftMetadata(metadata: unknown): metadata is {
   lastModifiedDateTime?: string;
   sourceWebUrl?: string;
 } {
-  if (!metadata || typeof metadata !== "object") return false;
+  if (!metadata || typeof metadata !== "object") {
+    return false;
+  }
   const m = metadata as Record<string, unknown>;
   return (
     typeof m.driveId === "string" &&
@@ -62,8 +64,12 @@ function chunkText(text: string, maxLen = 2400, overlap = 200): string[] {
   while (i < n) {
     const end = Math.min(i + maxLen, n);
     const slice = text.slice(i, end).trim();
-    if (slice) chunks.push(slice);
-    if (end === n) break;
+    if (slice) {
+      chunks.push(slice);
+    }
+    if (end === n) {
+      break;
+    }
     i += step;
   }
   return chunks;

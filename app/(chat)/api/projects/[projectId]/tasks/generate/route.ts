@@ -111,7 +111,7 @@ export async function POST(
     }
 
     // Add pasted content if provided
-    if (parsed.data.pastedContent && parsed.data.pastedContent.trim()) {
+    if (parsed.data.pastedContent?.trim()) {
       contentParts.push(
         `## Pasted Content\n\n${parsed.data.pastedContent.trim()}`
       );

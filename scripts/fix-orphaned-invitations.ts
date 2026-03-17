@@ -1,6 +1,6 @@
 import { config } from "dotenv";
-import { drizzle } from "drizzle-orm/postgres-js";
 import { eq, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { projectInvitation, projectUser, user } from "../lib/db/schema";
 
@@ -21,7 +21,9 @@ const runFix = async () => {
   const connection = postgres(postgresUrl, { max: 1 });
   const db = drizzle(connection);
 
-  console.log("🔍 Finding orphaned invitations (invitations for users who already exist)...\n");
+  console.log(
+    "🔍 Finding orphaned invitations (invitations for users who already exist)...\n"
+  );
 
   const orphanedInvitations = await db
     .select({
@@ -35,18 +37,25 @@ const runFix = async () => {
     .from(projectInvitation)
     .innerJoin(
       user,
-      eq(sql`LOWER(TRIM(${projectInvitation.email}))`, sql`LOWER(TRIM(${user.email}))`)
+      eq(
+        sql`LOWER(TRIM(${projectInvitation.email}))`,
+        sql`LOWER(TRIM(${user.email}))`
+      )
     );
 
   if (orphanedInvitations.length === 0) {
-    console.log("✅ No orphaned invitations found. All invitations are for users who don't exist yet.");
+    console.log(
+      "✅ No orphaned invitations found. All invitations are for users who don't exist yet."
+    );
     await connection.end();
     process.exit(0);
   }
 
   console.log(`Found ${orphanedInvitations.length} orphaned invitation(s):\n`);
   for (const inv of orphanedInvitations) {
-    console.log(`  - ${inv.email} (${inv.userName ?? "no name"}) → project ${inv.projectId} as ${inv.role}`);
+    console.log(
+      `  - ${inv.email} (${inv.userName ?? "no name"}) → project ${inv.projectId} as ${inv.role}`
+    );
   }
   console.log();
 
@@ -78,11 +87,15 @@ const runFix = async () => {
       console.log(`  ✅ ${inv.email} added to project ${inv.projectId}`);
     } catch (error) {
       skipped++;
-      console.log(`  ⚠️  Skipped ${inv.email} for project ${inv.projectId}: ${error}`);
+      console.log(
+        `  ⚠️  Skipped ${inv.email} for project ${inv.projectId}: ${error}`
+      );
     }
   }
 
-  console.log(`\n✅ Done! Converted ${converted} invitation(s), skipped ${skipped}.`);
+  console.log(
+    `\n✅ Done! Converted ${converted} invitation(s), skipped ${skipped}.`
+  );
   await connection.end();
   process.exit(0);
 };

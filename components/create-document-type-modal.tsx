@@ -182,8 +182,9 @@ export function CreateDocumentTypeModal({
       !selectedProjectId ||
       !formName.trim() ||
       formAcceptedMimeTypes.length === 0
-    )
+    ) {
       return;
+    }
 
     if (formExtractionMethod === "custom" && !schemaValidation.isValid) {
       toast.error(schemaValidation.error ?? "Invalid output schema");

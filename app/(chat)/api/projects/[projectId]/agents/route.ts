@@ -200,7 +200,9 @@ export async function GET(
       .map((doc) => {
         const prebuiltId = (doc.metadata as any).prebuiltId as string;
         const prebuilt = PREBUILT_AGENTS.find((p) => p.id === prebuiltId);
-        if (!prebuilt) return null;
+        if (!prebuilt) {
+          return null;
+        }
         return {
           id: prebuiltId,
           name: prebuilt.name,
@@ -253,7 +255,13 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { name, description, systemPrompt, prebuiltId, metadata: extraMetadata } = body as {
+    const {
+      name,
+      description,
+      systemPrompt,
+      prebuiltId,
+      metadata: extraMetadata,
+    } = body as {
       name?: string;
       description?: string;
       systemPrompt?: string;

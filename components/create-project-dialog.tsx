@@ -3,7 +3,6 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useSWRConfig } from "swr";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,10 +16,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useProjectSelector } from "@/hooks/use-project-selector";
 
-interface CreateProjectDialogProps {
+type CreateProjectDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
+};
 
 export function CreateProjectDialog({
   open,
@@ -34,7 +33,9 @@ export function CreateProjectDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -68,7 +69,7 @@ export function CreateProjectDialog({
       if (pathname.startsWith("/chat/")) {
         router.push("/chat");
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error("Failed to create project");
     } finally {
       setIsSubmitting(false);

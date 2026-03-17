@@ -26,7 +26,9 @@ export async function GET(
   }
 
   const { searchParams } = new URL(request.url);
-  const parsed = QuerySchema.safeParse({ folderId: searchParams.get("folderId") });
+  const parsed = QuerySchema.safeParse({
+    folderId: searchParams.get("folderId"),
+  });
   if (!parsed.success) {
     return NextResponse.json({ error: "Missing folderId" }, { status: 400 });
   }

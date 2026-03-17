@@ -16,7 +16,9 @@ export default function ContactPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting) {
+      return;
+    }
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/contact", {
@@ -50,54 +52,54 @@ export default function ContactPage() {
         shortly.
       </p>
       <form
+        aria-label="Contact form"
         className="space-y-6"
         onSubmit={handleSubmit}
-        aria-label="Contact form"
       >
         <div className="space-y-2">
           <Label htmlFor="contact-name">Name</Label>
           <Input
-            id="contact-name"
-            type="text"
-            placeholder="Your name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            maxLength={200}
             disabled={isSubmitting}
+            id="contact-name"
+            maxLength={200}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your name"
+            required
+            type="text"
+            value={name}
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="contact-email">Email</Label>
           <Input
-            id="contact-email"
-            type="email"
-            placeholder="you@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            maxLength={320}
             disabled={isSubmitting}
+            id="contact-email"
+            maxLength={320}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@company.com"
+            required
+            type="email"
+            value={email}
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="contact-message">Message</Label>
           <Textarea
-            id="contact-message"
-            placeholder="How can we help?"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            required
-            maxLength={5000}
-            rows={4}
             className="resize-none"
             disabled={isSubmitting}
+            id="contact-message"
+            maxLength={5000}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="How can we help?"
+            required
+            rows={4}
+            value={message}
           />
         </div>
         <Button
-          type="submit"
           className="landing-cta-primary w-full sm:w-auto"
           disabled={isSubmitting}
+          type="submit"
         >
           {isSubmitting ? "Sending…" : "Send message"}
         </Button>
@@ -105,16 +107,16 @@ export default function ContactPage() {
       <p className="mt-6 text-muted-foreground text-sm">
         Prefer email?{" "}
         <a
-          href="mailto:jeff@adventureflow.ai"
           className="font-medium text-foreground underline hover:no-underline"
+          href="mailto:jeff@adventureflow.ai"
         >
           jeff@adventureflow.ai
         </a>
       </p>
       <p className="mt-4">
         <Link
-          href="/"
           className="text-muted-foreground text-sm hover:text-foreground"
+          href="/"
         >
           ← Back to home
         </Link>

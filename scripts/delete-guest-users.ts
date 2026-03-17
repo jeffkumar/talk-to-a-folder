@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import { and, eq, inArray, like, sql } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import {
@@ -76,7 +76,7 @@ async function deleteGuestUsers() {
 
   // 1. Delete votes for guest chats
   if (guestChatIds.length > 0) {
-    const votesDeleted = await db
+    const _votesDeleted = await db
       .delete(vote)
       .where(inArray(vote.chatId, guestChatIds));
     console.log("Deleted votes");
@@ -84,7 +84,7 @@ async function deleteGuestUsers() {
 
   // 2. Delete messages for guest chats
   if (guestChatIds.length > 0) {
-    const messagesDeleted = await db
+    const _messagesDeleted = await db
       .delete(message)
       .where(inArray(message.chatId, guestChatIds));
     console.log("Deleted messages");
@@ -92,7 +92,7 @@ async function deleteGuestUsers() {
 
   // 3. Delete streams for guest chats
   if (guestChatIds.length > 0) {
-    const streamsDeleted = await db
+    const _streamsDeleted = await db
       .delete(stream)
       .where(inArray(stream.chatId, guestChatIds));
     console.log("Deleted streams");
@@ -100,7 +100,7 @@ async function deleteGuestUsers() {
 
   // 4. Delete chats
   if (guestChatIds.length > 0) {
-    const chatsDeleted = await db
+    const _chatsDeleted = await db
       .delete(chat)
       .where(inArray(chat.id, guestChatIds));
     console.log("Deleted chats");
@@ -123,7 +123,7 @@ async function deleteGuestUsers() {
 
   // 6. Delete documents
   if (guestDocuments.length > 0) {
-    const docsDeleted = await db
+    const _docsDeleted = await db
       .delete(document)
       .where(inArray(document.userId, guestUserIds));
     console.log("Deleted documents");
@@ -131,7 +131,7 @@ async function deleteGuestUsers() {
 
   // 7. Delete project docs for guest projects
   if (guestProjectIds.length > 0) {
-    const projectDocsDeleted = await db
+    const _projectDocsDeleted = await db
       .delete(projectDoc)
       .where(inArray(projectDoc.projectId, guestProjectIds));
     console.log("Deleted project docs");
@@ -139,20 +139,20 @@ async function deleteGuestUsers() {
 
   // 8. Delete projects
   if (guestProjectIds.length > 0) {
-    const projectsDeleted = await db
+    const _projectsDeleted = await db
       .delete(project)
       .where(inArray(project.id, guestProjectIds));
     console.log("Deleted projects");
   }
 
   // 9. Delete feedback requests
-  const feedbackDeleted = await db
+  const _feedbackDeleted = await db
     .delete(feedbackRequest)
     .where(inArray(feedbackRequest.userId, guestUserIds));
   console.log("Deleted feedback requests");
 
   // 10. Delete integration connections
-  const integrationsDeleted = await db
+  const _integrationsDeleted = await db
     .delete(integrationConnection)
     .where(inArray(integrationConnection.userId, guestUserIds));
   console.log("Deleted integration connections");

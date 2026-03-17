@@ -17,20 +17,20 @@ const REVERSE: Record<Dir, Dir> = {
   right: "left",
 };
 
-interface GridInfo {
+type GridInfo = {
   cols: number;
   rows: number;
   forbidden: Set<string>;
-}
+};
 
-interface BlockState {
+type BlockState = {
   id: number;
   col: number;
   row: number;
   dir: Dir;
   stopped?: boolean;
   label?: string;
-}
+};
 
 function Block({
   col,
@@ -58,6 +58,9 @@ function Block({
   return (
     <span
       className={`hero-grid-box ${stopped || paused ? "" : "hero-grid-box-movable"}`}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{
         width: BLOCK_SIZE,
         height: BLOCK_SIZE,
@@ -65,14 +68,13 @@ function Block({
         left: 0,
         top: 0,
       }}
-      onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
     >
       <span className="hero-grid-box-tooltip">
         {stopped ? "Click to activate" : "Click to stop"}
       </span>
-      {displayLabel && <span className="hero-grid-box-label">{displayLabel}</span>}
+      {displayLabel && (
+        <span className="hero-grid-box-label">{displayLabel}</span>
+      )}
     </span>
   );
 }
@@ -96,7 +98,9 @@ export default function HeroGridBlocks() {
   useEffect(() => {
     function measure() {
       const el = containerRef.current;
-      if (!el) return;
+      if (!el) {
+        return;
+      }
       const { width, height } = el.getBoundingClientRect();
       const cols = Math.floor(width / CELL);
       const rows = Math.floor(height / CELL);
@@ -113,7 +117,14 @@ export default function HeroGridBlocks() {
   const [blocks, setBlocks] = useState<BlockState[]>(() => [
     { id: 0, col: 0, row: 0, dir: "right" },
     { id: 1, col: 1, row: 3, dir: "down", label: "Your agent tomorrow" },
-    { id: 3, col: 4, row: 0, dir: "left", stopped: true, label: "Your agent today" },
+    {
+      id: 3,
+      col: 4,
+      row: 0,
+      dir: "left",
+      stopped: true,
+      label: "Your agent today",
+    },
   ]);
 
   const handleBlockHover = useCallback((id: number) => {
@@ -129,7 +140,9 @@ export default function HeroGridBlocks() {
   const handleBlockClick = useCallback((id: number) => {
     setBlocks((prev) =>
       prev.map((b) => {
-        if (b.id !== id) return b;
+        if (b.id !== id) {
+          return b;
+        }
         if (b.stopped) {
           return { ...b, stopped: false, label: "Agent activated" };
         }
@@ -141,14 +154,18 @@ export default function HeroGridBlocks() {
   const tick = useCallback(() => {
     setBlocks((prev) => {
       const { cols, rows, forbidden } = gridRef.current;
-      if (cols < 4 || rows < 3) return prev;
+      if (cols < 4 || rows < 3) {
+        return prev;
+      }
 
       const next = prev.map((b) => ({ ...b }));
       const occupied = new Set(next.map((b) => `${b.col},${b.row}`));
       const vacatedTo = new Map<string, string>();
 
       next.forEach((b) => {
-        if (b.stopped || b.id === hoveredRef.current) return;
+        if (b.stopped || b.id === hoveredRef.current) {
+          return;
+        }
 
         if (b.col < 0 || b.col >= cols || b.row < 0 || b.row >= rows) {
           b.col = 0;
@@ -158,9 +175,13 @@ export default function HeroGridBlocks() {
         const myPos = `${b.col},${b.row}`;
 
         function canGo(c: number, r: number): boolean {
-          if (c < 0 || c >= cols || r < 0 || r >= rows) return false;
+          if (c < 0 || c >= cols || r < 0 || r >= rows) {
+            return false;
+          }
           const k = `${c},${r}`;
-          return !forbidden.has(k) && !occupied.has(k) && vacatedTo.get(k) !== myPos;
+          return (
+            !forbidden.has(k) && !occupied.has(k) && vacatedTo.get(k) !== myPos
+          );
         }
 
         const [nc, nr] = [b.col + DX[b.dir], b.row + DY[b.dir]];
@@ -170,7 +191,9 @@ export default function HeroGridBlocks() {
             b.dir === "left" || b.dir === "right"
               ? ["up", "down"]
               : ["left", "right"];
-          if (Math.random() < 0.5) perp.reverse();
+          if (Math.random() < 0.5) {
+            perp.reverse();
+          }
           for (const d of perp) {
             const [tc, tr] = [b.col + DX[d], b.row + DY[d]];
             if (canGo(tc, tr)) {
@@ -200,7 +223,9 @@ export default function HeroGridBlocks() {
           b.dir === "left" || b.dir === "right"
             ? ["up", "down"]
             : ["left", "right"];
-        if (Math.random() < 0.5) perp.reverse();
+        if (Math.random() < 0.5) {
+          perp.reverse();
+        }
         const tryDirs = [...perp, REVERSE[b.dir]];
 
         for (const d of tryDirs) {
@@ -228,18 +253,18 @@ export default function HeroGridBlocks() {
   }, [tick]);
 
   return (
-    <div ref={containerRef} className="hero-grid-boxes" aria-hidden="true">
+    <div aria-hidden="true" className="hero-grid-boxes" ref={containerRef}>
       {blocks.map((b) => (
         <Block
-          key={b.id}
           col={b.col}
-          row={b.row}
-          stopped={b.stopped}
           hovered={hoveredId === b.id}
+          key={b.id}
           label={b.label}
           onClick={() => handleBlockClick(b.id)}
           onMouseEnter={() => handleBlockHover(b.id)}
           onMouseLeave={handleBlockLeave}
+          row={b.row}
+          stopped={b.stopped}
         />
       ))}
     </div>

@@ -59,7 +59,9 @@ function PureArtifactMessages({
   >();
 
   useEffect(() => {
-    if (!dataStream?.length) return;
+    if (!dataStream?.length) {
+      return;
+    }
 
     for (let i = dataStream.length - 1; i >= 0; i -= 1) {
       const part = dataStream[i];

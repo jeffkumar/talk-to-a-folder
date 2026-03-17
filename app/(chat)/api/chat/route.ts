@@ -27,7 +27,6 @@ import {
   emailFormattingPrompt,
   getEmailAgentSystemPrompt,
   type RequestHints,
-  systemPrompt,
 } from "@/lib/ai/prompts";
 import { myProvider } from "@/lib/ai/providers";
 import { financeQuery } from "@/lib/ai/tools/finance-query";
@@ -51,10 +50,10 @@ import {
   saveMessages,
   updateChatLastContextById,
 } from "@/lib/db/queries";
-import { extractDriveFolderIds } from "@/lib/integrations/google/parse-drive-url";
 import type { DBMessage } from "@/lib/db/schema";
 import { useOpenAIInference } from "@/lib/env";
 import { ChatSDKError } from "@/lib/errors";
+import { extractDriveFolderIds } from "@/lib/integrations/google/parse-drive-url";
 import {
   inferSourceTypeFromNamespace,
   namespacesForSourceTypes,
@@ -107,10 +106,18 @@ function startMsForPreset(
     return null;
   }
   const dayMs = 24 * 60 * 60 * 1000;
-  if (preset === "1d") return nowMs - 1 * dayMs;
-  if (preset === "7d") return nowMs - 7 * dayMs;
-  if (preset === "30d") return nowMs - 30 * dayMs;
-  if (preset === "90d") return nowMs - 90 * dayMs;
+  if (preset === "1d") {
+    return nowMs - 1 * dayMs;
+  }
+  if (preset === "7d") {
+    return nowMs - 7 * dayMs;
+  }
+  if (preset === "30d") {
+    return nowMs - 30 * dayMs;
+  }
+  if (preset === "90d") {
+    return nowMs - 90 * dayMs;
+  }
   return null;
 }
 
@@ -150,7 +157,9 @@ function escapeRegExp(text: string) {
 
 function stripMatchedText(fullText: string, matchedText: string | undefined) {
   const needle = typeof matchedText === "string" ? matchedText.trim() : "";
-  if (!needle) return fullText;
+  if (!needle) {
+    return fullText;
+  }
   const re = new RegExp(escapeRegExp(needle), "gi");
   return fullText.replace(re, " ").replace(/\s+/g, " ").trim();
 }
@@ -165,7 +174,9 @@ function messageContentToText(content: unknown): string {
   if (Array.isArray(content)) {
     const textParts: string[] = [];
     for (const part of content) {
-      if (!part || typeof part !== "object") continue;
+      if (!part || typeof part !== "object") {
+        continue;
+      }
       const p = part as Record<string, unknown>;
       if (p.type === "text" && typeof p.text === "string") {
         textParts.push(p.text);
@@ -182,7 +193,9 @@ function messageContentToText(content: unknown): string {
 function coerceMessagesToTextOnly(messages: unknown[]): unknown[] {
   return messages
     .map((m) => {
-      if (!m || typeof m !== "object") return null;
+      if (!m || typeof m !== "object") {
+        return null;
+      }
       const msg = m as Record<string, unknown>;
       const role = msg.role;
       if (role !== "user" && role !== "assistant" && role !== "system") {
@@ -190,7 +203,9 @@ function coerceMessagesToTextOnly(messages: unknown[]): unknown[] {
       }
       const content = messageContentToText(msg.content);
       // Drop messages that become empty after stripping non-text parts.
-      if (!content) return null;
+      if (!content) {
+        return null;
+      }
       return { ...msg, content };
     })
     .filter((m) => m !== null);
@@ -198,16 +213,26 @@ function coerceMessagesToTextOnly(messages: unknown[]): unknown[] {
 
 function hasNonImageFileParts(messages: unknown[]): boolean {
   for (const m of messages) {
-    if (!m || typeof m !== "object") continue;
+    if (!m || typeof m !== "object") {
+      continue;
+    }
     const msg = m as Record<string, unknown>;
     const content = msg.content;
-    if (!Array.isArray(content)) continue;
+    if (!Array.isArray(content)) {
+      continue;
+    }
     for (const part of content) {
-      if (!part || typeof part !== "object") continue;
+      if (!part || typeof part !== "object") {
+        continue;
+      }
       const p = part as Record<string, unknown>;
-      if (p.type !== "file") continue;
+      if (p.type !== "file") {
+        continue;
+      }
       const mediaType = p.mediaType;
-      if (typeof mediaType !== "string") return true;
+      if (typeof mediaType !== "string") {
+        return true;
+      }
       if (!mediaType.startsWith("image/")) {
         return true;
       }
@@ -219,7 +244,9 @@ function hasNonImageFileParts(messages: unknown[]): boolean {
 type RetrievalTimeFilterMode = "sourceCreatedAtMs" | "rowTimestamp";
 
 function parseCsvEnv(value: string | undefined): string[] {
-  if (!value) return [];
+  if (!value) {
+    return [];
+  }
   return value
     .split(",")
     .map((s) => s.trim())
@@ -318,7 +345,9 @@ function zonedDateTimeToUtcMs({
     );
     const diff = desiredLocalMs - actualLocalMs;
     utcMs += diff;
-    if (diff === 0) break;
+    if (diff === 0) {
+      break;
+    }
   }
   return utcMs;
 }
@@ -388,23 +417,49 @@ function getZonedWeekdayIndex(
     dtf.formatToParts(new Date(utcMs)).find((p) => p.type === "weekday")
       ?.value ?? "";
   const key = weekday.toLowerCase().slice(0, 3);
-  if (key === "sun") return 0;
-  if (key === "mon") return 1;
-  if (key === "tue") return 2;
-  if (key === "wed") return 3;
-  if (key === "thu") return 4;
-  if (key === "fri") return 5;
-  if (key === "sat") return 6;
+  if (key === "sun") {
+    return 0;
+  }
+  if (key === "mon") {
+    return 1;
+  }
+  if (key === "tue") {
+    return 2;
+  }
+  if (key === "wed") {
+    return 3;
+  }
+  if (key === "thu") {
+    return 4;
+  }
+  if (key === "fri") {
+    return 5;
+  }
+  if (key === "sat") {
+    return 6;
+  }
   return null;
 }
 
 function weekdayTokenToIndex(token: WeekdayToken): WeekdayIndex {
-  if (token === "sun") return 0;
-  if (token === "mon") return 1;
-  if (token === "tue") return 2;
-  if (token === "wed") return 3;
-  if (token === "thu") return 4;
-  if (token === "fri") return 5;
+  if (token === "sun") {
+    return 0;
+  }
+  if (token === "mon") {
+    return 1;
+  }
+  if (token === "tue") {
+    return 2;
+  }
+  if (token === "wed") {
+    return 3;
+  }
+  if (token === "thu") {
+    return 4;
+  }
+  if (token === "fri") {
+    return 5;
+  }
   return 6;
 }
 
@@ -419,11 +474,15 @@ function windowForLastWeekday({
 }): { startMs: number; endMs: number } | null {
   const nowLocal = getZonedParts(nowMs, timeZone);
   const nowDow = getZonedWeekdayIndex(nowMs, timeZone);
-  if (nowDow === null) return null;
+  if (nowDow === null) {
+    return null;
+  }
 
   // "last Friday" means the previous Friday, not "today" if today is Friday.
   let deltaDays = (nowDow - targetDow + 7) % 7;
-  if (deltaDays === 0) deltaDays = 7;
+  if (deltaDays === 0) {
+    deltaDays = 7;
+  }
 
   const target = addDaysToYmd(
     { year: nowLocal.year, month: nowLocal.month, day: nowLocal.day },
@@ -449,11 +508,15 @@ function windowForLastWeekSegment({
 }): { startMs: number; endMs: number } | null {
   const nowLocal = getZonedParts(nowMs, timeZone);
   const nowDow = getZonedWeekdayIndex(nowMs, timeZone);
-  if (nowDow === null) return null;
+  if (nowDow === null) {
+    return null;
+  }
 
   // Find the previous occurrence of the segment's "endDow"
   let deltaToEnd = (nowDow - endDow + 7) % 7;
-  if (deltaToEnd === 0) deltaToEnd = 7;
+  if (deltaToEnd === 0) {
+    deltaToEnd = 7;
+  }
 
   const endDay = addDaysToYmd(
     { year: nowLocal.year, month: nowLocal.month, day: nowLocal.day },
@@ -562,9 +625,12 @@ function computeWindowFromIntent({
             month: intent.month,
             day: intent.day,
           });
-    if (year === null) return null;
-    if (!isValidYmd({ year, month: intent.month, day: intent.day }))
+    if (year === null) {
       return null;
+    }
+    if (!isValidYmd({ year, month: intent.month, day: intent.day })) {
+      return null;
+    }
     const startMs = startOfLocalDayUtcMs({
       year,
       month: intent.month,
@@ -582,12 +648,24 @@ function computeWindowFromIntent({
 }
 
 function validateTimeWindowIntent(intent: TimeWindowIntent): boolean {
-  if (intent.kind === "none") return true;
-  if (intent.kind === "preset") return true;
-  if (intent.kind === "relativeDay") return true;
-  if (intent.kind === "absoluteDate") return true;
-  if (intent.kind === "lastWeekday") return true;
-  if (intent.kind === "lastWeekSegment") return true;
+  if (intent.kind === "none") {
+    return true;
+  }
+  if (intent.kind === "preset") {
+    return true;
+  }
+  if (intent.kind === "relativeDay") {
+    return true;
+  }
+  if (intent.kind === "absoluteDate") {
+    return true;
+  }
+  if (intent.kind === "lastWeekday") {
+    return true;
+  }
+  if (intent.kind === "lastWeekSegment") {
+    return true;
+  }
   return false;
 }
 
@@ -714,12 +792,16 @@ function timestampMsFromRow(row: unknown): number | null {
   }
   if (typeof sourceCreatedAtMs === "string" && sourceCreatedAtMs.length > 0) {
     const parsed = Number(sourceCreatedAtMs);
-    if (Number.isFinite(parsed)) return parsed;
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
   }
   const ts = r.ts;
   if (typeof ts === "string" && ts.length > 0) {
     const parsedSeconds = Number(ts);
-    if (Number.isFinite(parsedSeconds)) return Math.floor(parsedSeconds * 1000);
+    if (Number.isFinite(parsedSeconds)) {
+      return Math.floor(parsedSeconds * 1000);
+    }
   }
   return null;
 }
@@ -793,7 +875,7 @@ export async function POST(request: Request) {
       selectedVisibilityType: VisibilityType;
       selectedAgentMode?: string; // "project", "finance", or custom agent UUID
       projectId?: string;
-      sourceTypes?: Array<"docs">;
+      sourceTypes?: "docs"[];
       ignoredDocIds?: string[];
       targetDocIds?: string[];
       retrievalRangePreset?: RetrievalRangePreset;
@@ -968,7 +1050,7 @@ export async function POST(request: Request) {
 
     const { longitude, latitude, city, country } = geolocation(request);
 
-    const requestHints: RequestHints = {
+    const _requestHints: RequestHints = {
       longitude,
       latitude,
       city,
@@ -992,9 +1074,7 @@ export async function POST(request: Request) {
     if (activeProjectId && userText) {
       const folderIds = extractDriveFolderIds(userText);
       if (folderIds.length > 0) {
-        const resolvedDocIds: string[] = [
-          ...(effectiveTargetDocIds ?? []),
-        ];
+        const resolvedDocIds: string[] = [...(effectiveTargetDocIds ?? [])];
         for (const folderId of folderIds) {
           const docs = await getProjectDocsByGoogleParentId({
             projectId: activeProjectId,
@@ -1021,12 +1101,18 @@ export async function POST(request: Request) {
     // This bypasses RAG limitations for structured data like transaction lists
     // For notes (which don't have extractedJsonBlobUrl), fetch from blobUrl instead
     let extractedJsonContext = "";
-    if (effectiveTargetDocIds && effectiveTargetDocIds.length > 0 && effectiveTargetDocIds.length <= 5) {
+    if (
+      effectiveTargetDocIds &&
+      effectiveTargetDocIds.length > 0 &&
+      effectiveTargetDocIds.length <= 5
+    ) {
       try {
         const extractedParts: string[] = [];
         for (const docId of effectiveTargetDocIds) {
           const doc = await getProjectDocById({ docId });
-          if (!doc) continue;
+          if (!doc) {
+            continue;
+          }
 
           const docName = doc.description || doc.filename || docId;
           const labels =
@@ -1396,7 +1482,9 @@ export async function POST(request: Request) {
                 : null;
             if (docId) {
               const count = docIdCounts.get(docId) ?? 0;
-              if (count >= maxChunksPerDoc) continue;
+              if (count >= maxChunksPerDoc) {
+                continue;
+              }
               docIdCounts.set(docId, count + 1);
             }
           }
@@ -1417,16 +1505,21 @@ export async function POST(request: Request) {
             return oneLine.length > 150 ? `${oneLine.slice(0, 150)}…` : oneLine;
           };
           const summarizeValue = (value: unknown) => {
-            if (value === null) return null;
+            if (value === null) {
+              return null;
+            }
             if (typeof value === "string") {
               const oneLine = value.replace(/\s+/g, " ").trim();
               return oneLine.length > 200
                 ? `${oneLine.slice(0, 200)}…`
                 : oneLine;
             }
-            if (typeof value === "number")
+            if (typeof value === "number") {
               return Number.isFinite(value) ? value : null;
-            if (typeof value === "boolean") return value;
+            }
+            if (typeof value === "boolean") {
+              return value;
+            }
             if (Array.isArray(value)) {
               return { type: "array", length: value.length };
             }
@@ -1445,12 +1538,20 @@ export async function POST(request: Request) {
 
             let included = 0;
             for (const key of keys) {
-              if (key === "content") continue;
-              if (key === "vector") continue;
-              if (key === "$dist") continue;
+              if (key === "content") {
+                continue;
+              }
+              if (key === "vector") {
+                continue;
+              }
+              if (key === "$dist") {
+                continue;
+              }
               attributes[key] = summarizeValue(r[key]);
               included += 1;
-              if (included >= 40) break;
+              if (included >= 40) {
+                break;
+              }
             }
 
             const content = typeof r.content === "string" ? r.content : "";
@@ -1631,7 +1732,9 @@ export async function POST(request: Request) {
                     ? `${sourceType}:${blobUrl}`
                     : `${sourceType}:${filename}`;
 
-            if (seen.has(key)) continue;
+            if (seen.has(key)) {
+              continue;
+            }
             seen.add(key);
             uniqueSources.push({
               sourceType,
@@ -1740,13 +1843,19 @@ Rules:
         // re-run the prior finance question with that entity included.
         const entityOnlyReply = (() => {
           const t = lastUserText.trim().toLowerCase();
-          if (t === "personal" || t === "personal.") return "personal";
-          if (t === "business" || t === "business.") return "business";
+          if (t === "personal" || t === "personal.") {
+            return "personal";
+          }
+          if (t === "business" || t === "business.") {
+            return "business";
+          }
           return null;
         })();
 
         const expandEntityOnlyReply = (() => {
-          if (!entityOnlyReply) return null;
+          if (!entityOnlyReply) {
+            return null;
+          }
           // Look for the immediately preceding assistant prompt asking for entity.
           const lastAssistant = uiMessages
             .slice(0, -1)
@@ -1770,7 +1879,9 @@ Rules:
           const askedEntity =
             lastAssistantText.includes("personal") &&
             lastAssistantText.includes("business");
-          if (!askedEntity) return null;
+          if (!askedEntity) {
+            return null;
+          }
 
           // Find the previous non-trivial user question.
           const priorUser = uiMessages
@@ -1778,7 +1889,9 @@ Rules:
             .slice()
             .reverse()
             .find((m) => {
-              if (m.role !== "user") return false;
+              if (m.role !== "user") {
+                return false;
+              }
               const txt = m.parts
                 .filter(
                   (
@@ -1789,11 +1902,15 @@ Rules:
                 .map((p) => p.text)
                 .join(" ")
                 .trim();
-              if (!txt) return false;
+              if (!txt) {
+                return false;
+              }
               const lower = txt.toLowerCase();
               return lower !== "personal" && lower !== "business";
             });
-          if (!priorUser) return null;
+          if (!priorUser) {
+            return null;
+          }
           const priorText = priorUser.parts
             .filter(
               (
@@ -1814,16 +1931,24 @@ Rules:
             AGGREGATION_HINT_RE.test(priorLower) ||
             FINANCE_DATA_QUERY_RE.test(priorLower) ||
             INCOME_DATA_QUERY_RE.test(priorLower);
-          if (!priorLooksLikeFinanceData) return null;
+          if (!priorLooksLikeFinanceData) {
+            return null;
+          }
           return `${priorText}\n\nEntity: ${entityOnlyReply === "personal" ? "Personal" : "Business"}`;
         })();
 
         const expandBusinessNameOnlyReply = await (async () => {
           const tRaw = lastUserText.trim();
           const tLower = tRaw.toLowerCase();
-          if (!tRaw) return null;
-          if (tLower === "personal" || tLower === "personal.") return null;
-          if (tLower === "business" || tLower === "business.") return null;
+          if (!tRaw) {
+            return null;
+          }
+          if (tLower === "personal" || tLower === "personal.") {
+            return null;
+          }
+          if (tLower === "business" || tLower === "business.") {
+            return null;
+          }
 
           // Look for the immediately preceding assistant prompt asking for business.
           const lastAssistant = uiMessages
@@ -1846,8 +1971,12 @@ Rules:
                 .toLowerCase()
             : "";
           const askedBusiness = lastAssistantText.includes("which business");
-          if (!askedBusiness) return null;
-          if (!activeProjectId) return null;
+          if (!askedBusiness) {
+            return null;
+          }
+          if (!activeProjectId) {
+            return null;
+          }
 
           const summary = await getProjectEntitySummaryForUser({
             userId: session.user.id,
@@ -1889,7 +2018,9 @@ Rules:
                 .sort((a, b) => b.lower.length - a.lower.length)[0]?.n ?? null;
           }
 
-          if (!matchedBusiness) return null;
+          if (!matchedBusiness) {
+            return null;
+          }
 
           // Find the previous non-trivial user question.
           const priorUser = uiMessages
@@ -1897,7 +2028,9 @@ Rules:
             .slice()
             .reverse()
             .find((m) => {
-              if (m.role !== "user") return false;
+              if (m.role !== "user") {
+                return false;
+              }
               const txt = m.parts
                 .filter(
                   (
@@ -1908,7 +2041,9 @@ Rules:
                 .map((p) => p.text)
                 .join(" ")
                 .trim();
-              if (!txt) return false;
+              if (!txt) {
+                return false;
+              }
               const lower = txt.toLowerCase();
               return (
                 lower !== "personal" &&
@@ -1916,7 +2051,9 @@ Rules:
                 lower !== matchedBusiness.toLowerCase()
               );
             });
-          if (!priorUser) return null;
+          if (!priorUser) {
+            return null;
+          }
           const priorText = priorUser.parts
             .filter(
               (
@@ -1935,7 +2072,9 @@ Rules:
             AGGREGATION_HINT_RE.test(priorLower) ||
             FINANCE_DATA_QUERY_RE.test(priorLower) ||
             INCOME_DATA_QUERY_RE.test(priorLower);
-          if (!priorLooksLikeFinanceData) return null;
+          if (!priorLooksLikeFinanceData) {
+            return null;
+          }
 
           return `${priorText}\n\nBusiness: ${matchedBusiness}`;
         })();
@@ -1951,7 +2090,9 @@ Rules:
             .slice()
             .reverse()
             .find((m) => m.role === "assistant");
-          if (!lastAssistant) return "";
+          if (!lastAssistant) {
+            return "";
+          }
           return lastAssistant.parts
             .filter(
               (
@@ -1990,8 +2131,12 @@ Rules:
             Boolean(expandBusinessNameOnlyReply));
 
         const financeQuestionForAgent = (() => {
-          if (expandEntityOnlyReply) return expandEntityOnlyReply;
-          if (expandBusinessNameOnlyReply) return expandBusinessNameOnlyReply;
+          if (expandEntityOnlyReply) {
+            return expandEntityOnlyReply;
+          }
+          if (expandBusinessNameOnlyReply) {
+            return expandBusinessNameOnlyReply;
+          }
           if (
             !FINANCE_FOLLOWUP_RE.test(normalizedLastUserText) &&
             !isFinanceTimeWindowReply
@@ -2014,8 +2159,9 @@ Rules:
             );
 
           // If it already includes key filters, don't expand.
-          if (hasTime && (hasCategory || hasEntity))
+          if (hasTime && (hasCategory || hasEntity)) {
             return normalizedLastUserText;
+          }
 
           // Add a small slice of recent turns so FinanceAgent can resolve "those merchants".
           const recent = uiMessages.slice(-8).map((m) => {
@@ -2190,17 +2336,22 @@ Rules:
           const hasRagContext = retrievedContext.length > 0;
 
           // Skip if no context at all, or if only RAG context on aggregation query
-          if (!hasExtractedJson && (!hasRagContext || isAggregationQuery))
+          if (!hasExtractedJson && (!hasRagContext || isAggregationQuery)) {
             return baseMessages;
+          }
 
           const lastUserIndex = (() => {
             for (let i = baseMessages.length - 1; i >= 0; i -= 1) {
               const m = baseMessages[i] as { role?: unknown };
-              if (m?.role === "user") return i;
+              if (m?.role === "user") {
+                return i;
+              }
             }
             return -1;
           })();
-          if (lastUserIndex === -1) return baseMessages;
+          if (lastUserIndex === -1) {
+            return baseMessages;
+          }
 
           // Build context: targeted doc content takes priority, then RAG context (if not aggregation)
           let contextContent = "";
@@ -2263,7 +2414,9 @@ Rules:
               process.env.DEBUG_CITATIONS_AGENT_CHAT === "1";
 
             const summarizeAgentOutputForChat = (output: unknown) => {
-              if (typeof output !== "object" || output === null) return output;
+              if (typeof output !== "object" || output === null) {
+                return output;
+              }
               const o = output as Record<string, unknown>;
 
               const toolCallsRaw = Array.isArray(o.tool_calls)

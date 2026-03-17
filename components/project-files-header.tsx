@@ -11,14 +11,12 @@ import { Button } from "@/components/ui/button";
 import { useProjectSelector } from "@/hooks/use-project-selector";
 import { cn } from "@/lib/utils";
 
-const TABS = [
-  { href: "/files", label: "Files", icon: FileText },
-] as const;
+const TABS = [{ href: "/files", label: "Files", icon: FileText }] as const;
 
 export function ProjectFilesHeader() {
   const [isShareOpen, setIsShareOpen] = useState(false);
   const { selectedProjectId } = useProjectSelector();
-  const pathname = usePathname();
+  const _pathname = usePathname();
 
   // Determine active tab
   const getActiveTab = () => {

@@ -2,10 +2,7 @@ import { put } from "@vercel/blob";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
-import {
-  isDevelopmentEnvironment,
-  preventDuplicateProjectDocFilenames,
-} from "@/lib/constants";
+import { preventDuplicateProjectDocFilenames } from "@/lib/constants";
 import {
   createProjectDoc,
   getProjectByIdForUser,

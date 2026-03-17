@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
-  Download,
   FileText,
   Loader2,
   Presentation,
@@ -87,7 +86,9 @@ type SlidesCardProps = {
  * - Text with JSON: "Here are your slides:\n{"slides": [...]}"
  */
 function extractSlidesJson(text: string): string | null {
-  if (!text) return null;
+  if (!text) {
+    return null;
+  }
 
   // First, try to strip markdown code block wrappers
   let cleaned = text.trim();
@@ -116,11 +117,15 @@ function extractSlidesJson(text: string): string | null {
   if (slidesStart === -1) {
     // Also try with single quotes or no quotes (less common but possible)
     const altStart = cleaned.indexOf('{"slides"');
-    if (altStart === -1) return null;
+    if (altStart === -1) {
+      return null;
+    }
   }
 
   const startIndex = cleaned.indexOf('{"slides"');
-  if (startIndex === -1) return null;
+  if (startIndex === -1) {
+    return null;
+  }
 
   // Extract JSON object using brace matching
   let braceCount = 0;
@@ -159,7 +164,9 @@ function extractSlidesJson(text: string): string | null {
     }
   }
 
-  if (endIndex === -1) return null;
+  if (endIndex === -1) {
+    return null;
+  }
 
   return cleaned.slice(startIndex, endIndex);
 }
@@ -197,7 +204,9 @@ function parseSlides(text: string): SlidesData | null {
 }
 
 function slidesToMarkdown(slidesData: SlidesData): string {
-  if (!slidesData || slidesData.slides.length === 0) return "";
+  if (!slidesData || slidesData.slides.length === 0) {
+    return "";
+  }
 
   const lines: string[] = [];
   for (const slide of slidesData.slides) {
@@ -225,7 +234,7 @@ export function SlidesCard({ content, className }: SlidesCardProps) {
   // Reset to first slide when content changes
   useEffect(() => {
     setCurrentIndex(0);
-  }, [content]);
+  }, []);
 
   if (!slidesData || slidesData.slides.length === 0) {
     return null;

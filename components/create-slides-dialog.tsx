@@ -72,7 +72,9 @@ export function CreateSlidesDialog({
   };
 
   const handleSubmit = async () => {
-    if (isSubmitting || docIds.length === 0 || !selectedProjectId) return;
+    if (isSubmitting || docIds.length === 0 || !selectedProjectId) {
+      return;
+    }
 
     setIsSubmitting(true);
     try {

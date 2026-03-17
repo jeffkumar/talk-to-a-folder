@@ -81,7 +81,9 @@ export function AskAboutDialog({
   };
 
   const handleSubmit = async () => {
-    if (!question.trim() || isSubmitting || docIds.length === 0) return;
+    if (!question.trim() || isSubmitting || docIds.length === 0) {
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -120,7 +122,7 @@ export function AskAboutDialog({
   // Get selected agent name for display
   const selectedBuiltIn = agentModes.find((m) => m.id === selectedAgentId);
   const selectedCustom = customAgents.find((a) => a.id === selectedAgentId);
-  const selectedAgentName =
+  const _selectedAgentName =
     selectedBuiltIn?.name ?? selectedCustom?.name ?? "Project";
 
   return (
