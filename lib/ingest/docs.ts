@@ -282,6 +282,44 @@ async function extractPagesWithReducto(
   return pages;
 }
 
+function isLikelyGarbageText(text: string): boolean {
+  const sample = text.slice(0, 2000);
+
+  // Check for PDF stream markers (raw PDF data leaked through)
+  const pdfMarkers = [
+    "/Type",
+    "/Font",
+    "/BaseFont",
+    "endobj",
+    "endstream",
+    "/Encoding",
+    "/ToUnicode",
+    "BT\n",
+    "\nET",
+    "/Resources",
+  ];
+  const markerCount = pdfMarkers.filter((m) => sample.includes(m)).length;
+  if (markerCount >= 3) {
+    return true;
+  }
+
+  // Check printable ASCII ratio (garbage often has high non-ASCII)
+  const printableAscii = sample.replace(/[^\x20-\x7E\n\r\t]/g, "");
+  const printableRatio = printableAscii.length / sample.length;
+  if (printableRatio < 0.7) {
+    return true;
+  }
+
+  // Check for recognizable word patterns
+  const wordMatches = sample.match(/[a-zA-Z]{3,}/g) ?? [];
+  const wordRatio = wordMatches.join("").length / sample.length;
+  if (wordRatio < 0.3 && sample.length > 100) {
+    return true;
+  }
+
+  return false;
+}
+
 async function extractPagesWithPdfjs(buffer: Buffer): Promise<string[]> {
   // Fallback: pdfjs-based extraction when Reducto is unavailable.
   const g = globalThis as unknown as Record<string, unknown>;
@@ -344,8 +382,18 @@ async function extractPagesWithPdfjs(buffer: Buffer): Promise<string[]> {
       })
     );
 
-    return pageTexts.filter((t) => t.length > 0);
-  } catch {
+    const filteredPages = pageTexts.filter((t) => t.length > 0);
+    const combinedText = filteredPages.join("\n");
+    if (combinedText.length > 0 && isLikelyGarbageText(combinedText)) {
+      throw new Error("pdfjs extracted garbage text (likely encoding issue)");
+    }
+    console.info(
+      `[ingest] pdfjs extracted ${filteredPages.length} pages from PDF`
+    );
+    return filteredPages;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[ingest] pdfjs failed: ${msg}, trying pdf-parse fallback`);
     const pdfParseModule = (await import("pdf-parse")) as unknown as {
       default?: unknown;
     };
@@ -356,6 +404,12 @@ async function extractPagesWithPdfjs(buffer: Buffer): Promise<string[]> {
     }>;
     const parsed = await pdfParse(buffer);
     const text = (typeof parsed.text === "string" ? parsed.text : "").trim();
+    if (text.length > 0 && isLikelyGarbageText(text)) {
+      throw new Error(
+        "pdf-parse extracted garbage text (likely encoding issue)"
+      );
+    }
+    console.info("[ingest] pdf-parse extracted text from PDF");
     return text ? [text] : [];
   }
 }
@@ -366,9 +420,17 @@ async function extractPagesFromPdf(
 ): Promise<string[]> {
   // Try Reducto first for better OCR and form field extraction
   try {
-    return await extractPagesWithReducto(buffer, filename ?? "document.pdf");
-  } catch {
-    // Fall back to pdfjs when Reducto is unavailable or fails
+    const pages = await extractPagesWithReducto(
+      buffer,
+      filename ?? "document.pdf"
+    );
+    console.info(`[ingest] Reducto extracted ${pages.length} chunks from PDF`);
+    return pages;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[ingest] Reducto PDF extraction failed: ${message}, falling back to pdfjs`
+    );
     return await extractPagesWithPdfjs(buffer);
   }
 }

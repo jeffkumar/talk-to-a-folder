@@ -1051,12 +1051,23 @@ export async function POST(request: Request) {
               extractedParts.push(docName);
             }
           } else if (doc.blobUrl) {
-            // Fallback: fetch raw content (for notes and docs without extracted JSON)
-            const resp = await fetch(doc.blobUrl);
-            if (resp.ok) {
-              const textContent = await resp.text();
-              extractedJsonContext += `\n\n## Content from "${docName}"${labelSuffix}\n${textContent}\n`;
-              extractedParts.push(docName);
+            // Skip binary files that don't have extracted JSON - they would produce garbage
+            const docMimeType = doc.mimeType ?? "";
+            const isBinaryFormat =
+              docMimeType.startsWith("application/pdf") ||
+              docMimeType.startsWith("image/") ||
+              docMimeType.startsWith("audio/") ||
+              docMimeType.startsWith("video/") ||
+              docMimeType.includes("octet-stream");
+
+            if (!isBinaryFormat) {
+              // Fallback: fetch raw content (for notes and text-based docs without extracted JSON)
+              const resp = await fetch(doc.blobUrl);
+              if (resp.ok) {
+                const textContent = await resp.text();
+                extractedJsonContext += `\n\n## Content from "${docName}"${labelSuffix}\n${textContent}\n`;
+                extractedParts.push(docName);
+              }
             }
           }
         }
